@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Cursor IDE
+.cursor/
+
+# openFrameworks build artifacts
+obj/
+bin/Partitura_del_Juego.app
+bin/Partitura_del_Juego.app.dSYM
+
+# Video clips (large binary files — store separately)
+bin/data/cortos/
+cortos/
+*.mp4
+*.mov
+
+# openFrameworks addons (keep addons.make, but not the addon source)
+# Compiled files
+*.o
+*.d
