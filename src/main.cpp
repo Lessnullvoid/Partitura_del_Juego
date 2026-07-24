@@ -5,6 +5,7 @@
 #include "OSCSender.h"
 #include "Channel.h"
 #include "GlobalDirector.h"
+#include "VideoDirector.h"
 
 int main() {
     // Load settings from bin/data/settings.json
@@ -40,11 +41,31 @@ int main() {
         cvp.bwPosterize    = c.value("bwPosterize",    cvp.bwPosterize);
     }
 
+    VideoDirectorParams videoParams;
+    if (cfg.contains("videoDirector")) {
+        const auto& v = cfg["videoDirector"];
+        videoParams.enabled           = v.value("enabled", videoParams.enabled);
+        videoParams.shortWeight       = v.value("shortWeight", videoParams.shortWeight);
+        videoParams.longWeight        = v.value("longWeight", videoParams.longWeight);
+        videoParams.fullWeight        = v.value("fullWeight", videoParams.fullWeight);
+        videoParams.shortMin          = v.value("shortMin", videoParams.shortMin);
+        videoParams.shortMax          = v.value("shortMax", videoParams.shortMax);
+        videoParams.longMin           = v.value("longMin", videoParams.longMin);
+        videoParams.longMax           = v.value("longMax", videoParams.longMax);
+        videoParams.sharedIntervalMin = v.value("sharedIntervalMin", videoParams.sharedIntervalMin);
+        videoParams.sharedIntervalMax = v.value("sharedIntervalMax", videoParams.sharedIntervalMax);
+        videoParams.sharedStartDelay  = v.value("sharedStartDelay", videoParams.sharedStartDelay);
+        videoParams.driftTolerance    = v.value("driftTolerance", videoParams.driftTolerance);
+    }
+
     (void)cfg.value("targetFPS", 30); // applied per-window via ofSetFrameRate in ChannelApp::setup()
 
     // Shared non-GL systems
     auto pool = std::make_shared<ClipPool>();
-    pool->scan("cortos");
+    std::string clipFolder = "cortos";
+    if (cfg.contains("clips") && cfg["clips"].contains("folder"))
+        clipFolder = cfg["clips"]["folder"].get<std::string>();
+    pool->scan(clipFolder);
 
     auto oscSender = std::make_shared<OSCSender>();
     oscSender->setup(oscHost, oscPort);
@@ -52,6 +73,9 @@ int main() {
     // Global performance director (shared across all channels)
     auto globalDir = std::make_shared<GlobalDirector>();
     globalDir->setup();
+
+    auto videoDir = std::make_shared<VideoDirector>();
+    videoDir->setup(pool.get(), videoParams);
 
     // Channels (GL resources allocated in ChannelApp::setup; lives for duration of ofRunMainLoop)
     Channel channels[4];
@@ -94,7 +118,7 @@ int main() {
     auto mainWindow = ofCreateWindow(ws);
     auto chApp0 = std::make_shared<ChannelApp>(&channels[0], 0,
                   chCfg[0].w, chCfg[0].h, pool.get(), oscSender.get(), cvp,
-                  globalDir.get());
+                  globalDir.get(), videoDir.get());
     ofRunApp(mainWindow, chApp0);
 
     // Channels 1-3
@@ -110,7 +134,7 @@ int main() {
         auto win = ofCreateWindow(ws2);
         auto app = std::make_shared<ChannelApp>(&channels[i], i,
                    chCfg[i].w, chCfg[i].h, pool.get(), oscSender.get(), cvp,
-                   globalDir.get());
+                   globalDir.get(), videoDir.get());
         ofRunApp(win, app);
     }
 
@@ -129,7 +153,7 @@ int main() {
         std::vector<Channel*> chPtrs = { &channels[0], &channels[1],
                                          &channels[2], &channels[3] };
         auto ctrlApp = std::make_shared<ControlApp>(chPtrs, pool.get(), oscSender.get(),
-                                                     globalDir.get());
+                                                     globalDir.get(), videoDir.get());
         ofRunApp(ctrlWindow, ctrlApp);
     }
 

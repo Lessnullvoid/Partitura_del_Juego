@@ -3,6 +3,9 @@
         "host": "localhost",
         "port": 9001
     },
+    "clips": {
+        "folder": "../../cortos"
+    },
 
     "channels": [
         { "x": 1512, "y": 50, "width": 480, "height": 854 },
@@ -11,10 +14,25 @@
         { "x": 2952, "y": 50, "width": 480, "height": 854 }
     ],
     "controlWindow": {
-        "x": 80, "y": 50, "width": 1200, "height": 700
+        "x": 30, "y": 40, "width": 1400, "height": 900
     },
 
     "targetFPS": 30,
+
+    "videoDirector": {
+        "enabled": true,
+        "shortWeight": 0.5,
+        "longWeight": 0.3,
+        "fullWeight": 0.2,
+        "shortMin": 8.0,
+        "shortMax": 25.0,
+        "longMin": 30.0,
+        "longMax": 120.0,
+        "sharedIntervalMin": 120.0,
+        "sharedIntervalMax": 300.0,
+        "sharedStartDelay": 0.35,
+        "driftTolerance": 0.08
+    },
 
     "cv": {
         "halfRes": true,

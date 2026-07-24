@@ -15,52 +15,87 @@ void OSCSender::send(const CVData& d) {
     int ch = d.channelIdx;
     std::string base = "/pdj/channel/" + ofToString(ch);
 
-    ofxOscBundle bundle;
+    ofxOscBundle coreBundle;
+    ofxOscBundle blobBundle;
+    ofxOscBundle contextBundle;
 
-    auto addFloat = [&](const std::string& addr, float v) {
+    auto addFloat = [](ofxOscBundle& target, const std::string& addr, float v) {
         ofxOscMessage m;
         m.setAddress(addr);
         m.addFloatArg(v);
-        bundle.addMessage(m);
+        target.addMessage(m);
     };
-    auto addInt = [&](const std::string& addr, int v) {
+    auto addInt = [](ofxOscBundle& target, const std::string& addr, int v) {
         ofxOscMessage m;
         m.setAddress(addr);
         m.addIntArg(v);
-        bundle.addMessage(m);
+        target.addMessage(m);
+    };
+    auto addString = [](ofxOscBundle& target, const std::string& addr, const std::string& v) {
+        ofxOscMessage m;
+        m.setAddress(addr);
+        m.addStringArg(v);
+        target.addMessage(m);
     };
 
+    // Sequence and time let the receiver detect loss, reordering, or staleness.
+    addInt  (coreBundle, base + "/state/frame", d.frameSequence);
+    addFloat(coreBundle, base + "/state/time",  d.timestamp);
+
     // Flow + motion
-    addFloat(base + "/flow/magnitude", d.flowMagnitude);
-    addFloat(base + "/flow/angle",     d.flowAngle);
-    addFloat(base + "/motion/energy",  d.motionEnergy);
+    addFloat(coreBundle, base + "/flow/magnitude", d.flowMagnitude);
+    addFloat(coreBundle, base + "/flow/angle",     d.flowAngle);
+    addFloat(coreBundle, base + "/motion/energy",  d.motionEnergy);
 
     // Blobs
-    addInt  (base + "/blobs/count",    d.blobCount);
-    addFloat(base + "/contour/length", d.contourLength);
+    addInt  (coreBundle, base + "/blobs/count",    d.blobCount);
+    addFloat(coreBundle, base + "/contour/length", d.contourLength);
 
+    // Always publish all fixed slots. Clearing unused slots prevents a departed
+    // detection from remaining indefinitely in the SuperCollider state. One
+    // compact message per slot keeps the UDP datagram below fragmentation size.
     int maxBlobs = std::min((int)d.blobs.size(), 8);
-    for (int i = 0; i < maxBlobs; i++) {
+    for (int i = 0; i < 8; i++) {
         std::string bp = base + "/blob/" + ofToString(i);
-        addFloat(bp + "/x",    d.blobs[i].x);
-        addFloat(bp + "/y",    d.blobs[i].y);
-        addFloat(bp + "/vx",   d.blobs[i].vx);
-        addFloat(bp + "/vy",   d.blobs[i].vy);
-        addFloat(bp + "/area", d.blobs[i].area);
-        addFloat(bp + "/bbW",  d.blobs[i].bbW);
-        addFloat(bp + "/bbH",  d.blobs[i].bbH);
+        bool active = i < maxBlobs;
+        ofxOscMessage m;
+        m.setAddress(bp + "/state");
+        m.addIntArg(active ? 1 : 0);
+        m.addFloatArg(active ? d.blobs[i].x    : 0.f);
+        m.addFloatArg(active ? d.blobs[i].y    : 0.f);
+        m.addFloatArg(active ? d.blobs[i].vx   : 0.f);
+        m.addFloatArg(active ? d.blobs[i].vy   : 0.f);
+        m.addFloatArg(active ? d.blobs[i].area : 0.f);
+        m.addFloatArg(active ? d.blobs[i].bbW  : 0.f);
+        m.addFloatArg(active ? d.blobs[i].bbH  : 0.f);
+        blobBundle.addMessage(m);
     }
 
     // Events
-    addInt  (base + "/event/collision",    d.events.collision    ? 1 : 0);
-    addInt  (base + "/event/ball",         d.events.ballDetected ? 1 : 0);
-    addFloat(base + "/event/ball/x",       d.events.ballPos.x);
-    addFloat(base + "/event/ball/y",       d.events.ballPos.y);
-    addFloat(base + "/event/crowd",        d.events.crowdDensity);
-    addFloat(base + "/event/leg_distance", d.events.legDistance);
+    addInt  (coreBundle, base + "/event/collision",    d.events.collision    ? 1 : 0);
+    addInt  (coreBundle, base + "/event/ball",         d.events.ballDetected ? 1 : 0);
+    addFloat(coreBundle, base + "/event/ball/x",       d.events.ballPos.x);
+    addFloat(coreBundle, base + "/event/ball/y",       d.events.ballPos.y);
+    addFloat(coreBundle, base + "/event/crowd",        d.events.crowdDensity);
+    addFloat(coreBundle, base + "/event/leg_distance", d.events.legDistance);
 
-    // Current visual mode
-    addInt  (base + "/score/mode",         d.scoreMode);
+    // Video, visual score, and shared performance moment. Revisions remain in
+    // every snapshot, so a dropped change packet is recovered by the next one.
+    addString(contextBundle, base + "/video/name",         d.videoName);
+    addFloat (contextBundle, base + "/video/position",     d.videoPosition);
+    addFloat (contextBundle, base + "/video/duration",     d.videoDuration);
+    addInt   (contextBundle, base + "/video/revision",     d.videoRevision);
+    addInt   (contextBundle, base + "/video/plan_type",    d.videoPlanType);
+    addInt   (contextBundle, base + "/video/shared",       d.videoShared);
+    addInt   (contextBundle, base + "/score/mode",         d.scoreMode);
+    addInt   (contextBundle, base + "/score/revision",     d.scoreRevision);
+    addInt   (contextBundle, base + "/director/temporal",  d.temporalPhase);
+    addFloat (contextBundle, base + "/director/speed",     d.speedMultiplier);
+    addInt   (contextBundle, base + "/director/clear",     d.clearPhase);
+    addFloat (contextBundle, base + "/director/clear_alpha", d.clearAlpha);
 
-    sender_.sendBundle(bundle);
+    // Three small packets avoid IP fragmentation on a typical Ethernet LAN.
+    sender_.sendBundle(coreBundle);
+    sender_.sendBundle(blobBundle);
+    sender_.sendBundle(contextBundle);
 }

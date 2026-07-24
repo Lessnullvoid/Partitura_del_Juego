@@ -118,6 +118,8 @@ void CVPipeline::update(ofPixels& grayPixels) {
 
 void CVPipeline::reset() {
     firstFrame_ = true;
+    data_ = CVData{};
+    boundingRects_.clear();
     flow_.resetFlow();
     bgSub_ = cv::createBackgroundSubtractorMOG2(params_.bgSubHistory, params_.bgSubThreshold, false);
 }

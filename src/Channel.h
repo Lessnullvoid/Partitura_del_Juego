@@ -6,6 +6,7 @@
 #include "ClipPool.h"
 #include "EventDetector.h"
 #include "GlobalDirector.h"
+#include "VideoDirector.h"
 
 class Channel {
 public:
@@ -30,11 +31,33 @@ public:
     ofVideoPlayer& getPlayer()      { return player_; }
 
     void setGlobalDirector(GlobalDirector* d) { dir_ = d; }
+    void setVideoDirector(VideoDirector* d) { videoDir_ = d; }
+    VideoPlanType getVideoPlanType() const { return activePlan_.type; }
+    bool isSharedVideoPlan() const { return activePlan_.shared; }
 
 private:
+    void sendOscSnapshot(CVData& data);
+    void applyPendingVideoPlan();
+    bool loadVideoPlan(const VideoPlan& plan);
+    bool configureLoadedPlan();
+    void finishActivePlan();
+
     int           idx_ = 0, w_ = 0, h_ = 0;
     std::string   currentClip_;
     float         baseSpeed_ = 1.0f;
+    int           oscFrameSequence_ = 0;
+    int           videoRevision_ = 0;
+    int           scoreRevision_ = 0;
+    int           lastScoreMode_ = -1;
+    VideoPlan     activePlan_;
+    int           appliedPlanRevision_ = 0;
+    float         segmentStartSeconds_ = 0.f;
+    float         segmentEndSeconds_ = 0.f;
+    float         planStartedAt_ = 0.f;
+    float         lastSyncCorrectionAt_ = 0.f;
+    bool          planStarted_ = false;
+    bool          planFinished_ = false;
+    bool          planConfigured_ = false;
 
     ofVideoPlayer  player_;
     ofFbo          bwFbo_;
@@ -48,4 +71,5 @@ private:
     ClipPool*        pool_ = nullptr;
     OSCSender*       osc_  = nullptr;
     GlobalDirector*  dir_  = nullptr;
+    VideoDirector*   videoDir_ = nullptr;
 };

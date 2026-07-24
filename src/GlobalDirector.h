@@ -25,22 +25,23 @@ enum class ClearPhase {
 // ---- Parameters (editable at runtime via ControlApp) -----------------------
 struct GlobalDirectorParams {
     // Target speeds (multipliers applied to each channel's base speed)
-    float slowSpeed       = 0.20f;   // 20 % of base speed
-    float fastSpeed       = 2.80f;   // 280 % of base speed
+    float slowSpeed       = 0.30f;   // 30 % — clearly slow, not frozen
+    float fastSpeed       = 3.50f;   // 350 % — unmistakably fast
 
     // Slow-motion durations (seconds)
-    float slowRampDownDur = 1.6f;
-    float slowHoldMin     = 3.5f;
-    float slowHoldMax     = 9.0f;
-    float slowRampUpDur   = 2.2f;
+    // Short ramps give an immediate, snappy feel from the button press.
+    float slowRampDownDur = 0.40f;   // snap in quickly
+    float slowHoldMin     = 2.0f;
+    float slowHoldMax     = 4.0f;
+    float slowRampUpDur   = 0.60f;   // snap out quickly
 
-    // Fast-forward durations (seconds) — noticeably shorter
-    float fastRampUpDur   = 0.35f;
-    float fastHoldMin     = 0.6f;
-    float fastHoldMax     = 2.2f;
-    float fastRampDownDur = 0.5f;
+    // Fast-forward durations (seconds)
+    float fastRampUpDur   = 0.15f;   // almost instant
+    float fastHoldMin     = 2.0f;    // sustain long enough to register
+    float fastHoldMax     = 4.0f;
+    float fastRampDownDur = 0.20f;   // snap back
 
-    // Auto-trigger intervals (seconds) — 0 = disabled
+    // Auto-trigger intervals (seconds)
     float slowIntervalMin  = 25.f;
     float slowIntervalMax  = 50.f;
     float fastIntervalMin  = 15.f;
@@ -54,9 +55,11 @@ struct GlobalDirectorParams {
     float clearIntervalMin = 30.f;
     float clearIntervalMax = 70.f;
 
-    bool autoSlow  = true;
-    bool autoFast  = true;
-    bool autoClear = true;
+    // Auto-triggers disabled by default: the performer decides when effects fire.
+    // Enable in the Global Director panel for autonomous mode.
+    bool autoSlow  = false;
+    bool autoFast  = false;
+    bool autoClear = false;
 };
 
 // ---- GlobalDirector ---------------------------------------------------------
@@ -85,7 +88,8 @@ public:
     // Manual triggers (e.g. from ControlApp buttons)
     void triggerSlow();
     void triggerFast();
-    void triggerClear(ofColor color = ofColor(0));
+    // Pass an explicit color to use it directly; call with no argument to cycle the palette.
+    void triggerClear(ofColor color = ofColor(0, 0, 0, 0));
 
     GlobalDirectorParams& params()       { return p_; }
     const GlobalDirectorParams& params() const { return p_; }
@@ -117,6 +121,8 @@ private:
     int           cColorIdx_ = 0;   // cycles through clear color palette
     double        cNextClear_ = 0.0;
 
-    // Frame-guard to prevent double-updating in multi-window setups
-    double lastTime_ = 0.0;
+    // Frame-guard to prevent double-updating in multi-window setups.
+    // -1 = uninitialized: setup() is called before the OF timer is ready,
+    // so we defer initialization to the first update() call.
+    double lastTime_ = -1.0;
 };

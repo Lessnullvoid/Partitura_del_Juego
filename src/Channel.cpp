@@ -1,5 +1,4 @@
 #include "Channel.h"
-#include <fstream>
 
 // Analysis FBO dimensions: 1/4 of a 1080x1920 display.
 // readToPixels at this size costs ~0.5 MB vs ~8 MB at full res (16x faster).
@@ -39,10 +38,20 @@ void Channel::setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const
 
     score_.setup(w, h);
 
-    loadNextClip();
+    if (videoDir_) {
+        applyPendingVideoPlan();
+    } else {
+        loadNextClip();
+    }
 }
 
 void Channel::loadNextClip() {
+    if (videoDir_) {
+        videoDir_->requestNext(idx_);
+        applyPendingVideoPlan();
+        return;
+    }
+
     std::string path = pool_->getRandomClip(idx_);
     if (path.empty()) {
         ofLogWarning("Channel") << "No clip available for channel " << idx_;
@@ -67,27 +76,201 @@ void Channel::loadNextClip() {
     }
     cv_.reset();
     score_.onClipChange();  // flash strobe on every clip transition
+    videoRevision_++;
+    CVData& data = const_cast<CVData&>(cv_.getData());
+    sendOscSnapshot(data);  // announce the cut immediately, then repeat every frame
     ofLogNotice("Channel") << "[" << idx_ << "] Playing: " << ofFilePath::getFileName(path);
 }
 
-void Channel::update() {
-    // #region agent log
-    { static bool _once = false; if (!_once && idx_ == 0) { _once = true; std::ofstream _f("/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/.cursor/debug-b4e03e.log", std::ios::app); _f << "{\"sessionId\":\"b4e03e\",\"hypothesisId\":\"A\",\"location\":\"Channel.cpp:update\",\"message\":\"dir_ check\",\"data\":{\"dirNull\":" << (dir_?0:1) << ",\"idx\":" << idx_ << "},\"timestamp\":" << (long long)(ofGetElapsedTimef()*1000) << "}\n"; } }
-    // #endregion
-    // Advance GlobalDirector state machine (safe to call from every channel — has dt guard)
+void Channel::applyPendingVideoPlan() {
+    if (!videoDir_) return;
+    const VideoPlan& plan = videoDir_->planFor(idx_);
+    if (plan.revision <= 0 || plan.revision == appliedPlanRevision_) return;
+    loadVideoPlan(plan);
+}
+
+bool Channel::loadVideoPlan(const VideoPlan& plan) {
+    if (plan.path.empty()) return false;
+
+    player_.stop();
+    player_.close();
+    if (!player_.load(plan.path)) {
+        ofLogError("Channel") << "[" << idx_ << "] Failed: " << plan.path;
+        if (videoDir_) videoDir_->requestNext(idx_);
+        return false;
+    }
+
+    currentClip_ = plan.path;
+    pool_->setActiveClip(idx_, plan.path);
+    player_.setLoopState(OF_LOOP_NONE);
+
+    activePlan_ = plan;
+    appliedPlanRevision_ = plan.revision;
+    planStarted_ = false;
+    planFinished_ = false;
+    planConfigured_ = false;
+    planStartedAt_ = ofGetElapsedTimef();
+    lastSyncCorrectionAt_ = 0.f;
+
+    player_.play();
+    if (plan.shared) player_.setPaused(true);
+    configureLoadedPlan();
+
+    cv_.reset();
+    score_.onClipChange();
+    videoRevision_++;
+    CVData& data = const_cast<CVData&>(cv_.getData());
+    sendOscSnapshot(data);
+    ofLogNotice("Channel") << "[" << idx_ << "] "
+        << VideoDirector::planTypeName(plan.type)
+        << (plan.shared ? " shared: " : ": ")
+        << ofFilePath::getFileName(plan.path);
+    return true;
+}
+
+bool Channel::configureLoadedPlan() {
+    if (planConfigured_) return true;
+    const float duration = std::max(0.f, player_.getDuration());
+    if (duration <= 0.f) return false;
+
+    if (activePlan_.type == VideoPlanType::FullVideo) {
+        segmentStartSeconds_ = 0.f;
+        segmentEndSeconds_ = duration;
+    } else {
+        const float requested = std::max(0.1f, activePlan_.requestedDuration);
+        const float segmentDuration = std::min(requested, duration);
+        const float latestStart = std::max(0.f, duration - segmentDuration);
+        segmentStartSeconds_ =
+            ofClamp(activePlan_.startFraction, 0.f, 1.f) * latestStart;
+        segmentEndSeconds_ = segmentStartSeconds_ + segmentDuration;
+    }
+
+    player_.setPosition(ofClamp(segmentStartSeconds_ / duration, 0.f, 1.f));
+    planConfigured_ = true;
+    if (activePlan_.shared) {
+        player_.setPaused(true);
+        if (videoDir_) {
+            videoDir_->reportReady(idx_, appliedPlanRevision_, duration,
+                                   segmentStartSeconds_, segmentEndSeconds_);
+        }
+    } else {
+        player_.setPaused(false);
+        planStarted_ = true;
+        planStartedAt_ = ofGetElapsedTimef();
+    }
+    return true;
+}
+
+void Channel::finishActivePlan() {
+    if (planFinished_) return;
+    planFinished_ = true;
+    player_.setPaused(true);
+    if (videoDir_) videoDir_->reportFinished(idx_, appliedPlanRevision_);
+}
+
+void Channel::sendOscSnapshot(CVData& data) {
+    if (!osc_) return;
+
+    int mode = (int)score_.currentMode();
+    if (mode != lastScoreMode_) {
+        lastScoreMode_ = mode;
+        scoreRevision_++;
+    }
+
+    data.channelIdx       = idx_;
+    data.frameSequence    = ++oscFrameSequence_;
+    data.timestamp        = ofGetElapsedTimef();
+    data.scoreMode        = mode;
+    data.scoreRevision    = scoreRevision_;
+    data.videoName        = ofFilePath::getFileName(currentClip_);
+    const float rawPosition = player_.isLoaded() ? player_.getPosition() : 0.f;
+    data.videoPosition    = std::isfinite(rawPosition)
+        ? ofClamp(rawPosition, 0.f, 1.f)
+        : 0.f;
+    data.videoDuration    = player_.isLoaded() ? player_.getDuration() : 0.f;
+    data.videoRevision    = videoRevision_;
+    data.videoPlanType    = (int)activePlan_.type;
+    data.videoShared      = activePlan_.shared ? 1 : 0;
+
     if (dir_) {
-        dir_->update();
-        float effective = baseSpeed_ * dir_->getSpeedMultiplier();
-        // #region agent log
-        { static long long _lastSpd = 0; long long _now = (long long)(ofGetElapsedTimef()*1000); float _m = dir_->getSpeedMultiplier(); if (idx_ == 0 && _m != 1.0f && _now - _lastSpd > 500) { _lastSpd = _now; std::ofstream _f("/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/.cursor/debug-b4e03e.log", std::ios::app); _f << "{\"sessionId\":\"b4e03e\",\"hypothesisId\":\"D\",\"location\":\"Channel.cpp:update:speed\",\"message\":\"speedMultiplier active\",\"data\":{\"multiplier\":" << _m << ",\"effective\":" << effective << ",\"tPhase\":" << (int)dir_->temporalPhase() << "},\"timestamp\":" << _now << "}\n"; } }
-        // #endregion
-        // Always apply — AVFoundation can reset rate to 1.0 on loop restarts
-        // and the stored speed value may not match what AVPlayer is actually doing.
-        player_.setSpeed(effective);
+        data.temporalPhase   = (int)dir_->temporalPhase();
+        data.speedMultiplier = dir_->getSpeedMultiplier();
+        data.clearPhase      = (int)dir_->clearPhase();
+        data.clearAlpha      = dir_->getClearAlpha() / 255.f;
+    } else {
+        data.temporalPhase   = 0;
+        data.speedMultiplier = 1.f;
+        data.clearPhase      = 0;
+        data.clearAlpha      = 0.f;
+    }
+
+    osc_->send(data);
+}
+
+void Channel::update() {
+    // Advance GlobalDirector state machine (safe to call from every channel — has dt guard)
+    if (dir_) dir_->update();
+    if (videoDir_) {
+        videoDir_->update(dir_ ? dir_->getSpeedMultiplier() : 1.f);
+        applyPendingVideoPlan();
     }
 
     player_.update();
-    if (!player_.isLoaded() || player_.getWidth() == 0) return;
+    if (videoDir_ && !planConfigured_) configureLoadedPlan();
+
+    // Apply speed AFTER update() so it always overwrites any rate reset that
+    // AVFoundation's internal loop-restart (OF_LOOP_NORMAL) silently performs.
+    // Calling it every frame is intentional: AVFoundation can reset the rate to
+    // 1.0 on loop boundaries, and this is the simplest reliable guard.
+    const float globalSpeed = dir_ ? dir_->getSpeedMultiplier() : 1.f;
+    const float effective = activePlan_.shared
+        ? globalSpeed
+        : baseSpeed_ * globalSpeed;
+    player_.setSpeed(effective);
+
+    if (videoDir_ && planConfigured_ && activePlan_.shared && !planFinished_) {
+        if (videoDir_->isSharedPlaying()) {
+            const float duration = player_.getDuration();
+            const float targetSeconds = videoDir_->sharedTargetSeconds();
+            if (!planStarted_) {
+                if (duration > 0.f) player_.setPosition(targetSeconds / duration);
+                player_.setPaused(false);
+                planStarted_ = true;
+                planStartedAt_ = ofGetElapsedTimef();
+            } else if (duration > 0.f) {
+                const float currentSeconds = player_.getPosition() * duration;
+                const float now = ofGetElapsedTimef();
+                if (std::abs(currentSeconds - targetSeconds) >
+                        videoDir_->driftTolerance() &&
+                    now - lastSyncCorrectionAt_ >= 0.5f) {
+                    player_.setPosition(ofClamp(targetSeconds / duration, 0.f, 1.f));
+                    lastSyncCorrectionAt_ = now;
+                }
+            }
+        } else if (!planStarted_) {
+            player_.setPaused(true);
+        } else if (!videoDir_->isSharedActive()) {
+            finishActivePlan();
+        }
+    } else if (videoDir_ && planConfigured_ && planStarted_ && !planFinished_ &&
+               player_.getDuration() > 0.f) {
+        const float currentSeconds = player_.getPosition() * player_.getDuration();
+        // AVFoundation commonly stops on the last decoded frame before normalized
+        // position reaches 1.0, while isPlaying() can remain true. A small
+        // time-based tolerance handles both natural ends and planned out-points;
+        // getIsMovieDone() is the authoritative fallback for short source clips.
+        const bool reachedOut =
+            currentSeconds >= std::max(segmentStartSeconds_,
+                                       segmentEndSeconds_ - 0.25f);
+        const bool movieDone = player_.getIsMovieDone();
+        if (reachedOut || movieDone) finishActivePlan();
+    }
+
+    if (!player_.isLoaded() || player_.getWidth() == 0) {
+        CVData& data = const_cast<CVData&>(cv_.getData());
+        sendOscSnapshot(data);
+        return;
+    }
 
     // --- Display FBO: B&W shader on full-res video, cover-cropped ---
     bwFbo_.begin();
@@ -133,12 +316,8 @@ void Channel::update() {
     // Pass both bw texture and raw video texture to the score renderer
     score_.update(bwFbo_.getTexture(), player_.getTexture(), cv_);
 
-    // Send OSC
-    if (osc_) {
-        data.channelIdx = idx_;
-        data.scoreMode  = (int)score_.currentMode();
-        osc_->send(data);
-    }
+    // Repeated full-state OSC snapshot: CV, events, video, score, and director.
+    sendOscSnapshot(data);
 }
 
 void Channel::draw() {
@@ -161,9 +340,6 @@ void Channel::draw() {
     // Must reset GL state: GraphicScore render functions can leave ofNoFill()
     // active, and blend mode may be dirty. Reset explicitly before drawing.
     if (dir_ && dir_->isClearActive()) {
-        // #region agent log
-        { static long long _lastClr = 0; long long _now = (long long)(ofGetElapsedTimef()*1000); if (idx_ == 0 && _now - _lastClr > 100) { _lastClr = _now; std::ofstream _f("/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/.cursor/debug-b4e03e.log", std::ios::app); _f << "{\"sessionId\":\"b4e03e\",\"hypothesisId\":\"C\",\"location\":\"Channel.cpp:draw:clear\",\"message\":\"clear overlay drawing\",\"data\":{\"alpha\":" << dir_->getClearAlpha() << ",\"cPhase\":" << (int)dir_->clearPhase() << ",\"r\":" << (int)dir_->getClearColor().r << ",\"g\":" << (int)dir_->getClearColor().g << ",\"b\":" << (int)dir_->getClearColor().b << "},\"timestamp\":" << _now << "}\n"; } }
-        // #endregion
         ofPushStyle();
         ofFill();
         ofEnableAlphaBlending();

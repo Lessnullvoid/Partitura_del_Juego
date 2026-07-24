@@ -4,8 +4,9 @@ void ChannelApp::setup() {
     ofSetBackgroundColor(0);
     ofSetFrameRate(30);
     ofHideCursor();
-    ch_->setup(idx_, w_, h_, pool_, osc_, cvp_);
     if (dir_) ch_->setGlobalDirector(dir_);
+    if (videoDir_) ch_->setVideoDirector(videoDir_);
+    ch_->setup(idx_, w_, h_, pool_, osc_, cvp_);
 }
 
 void ChannelApp::update() {

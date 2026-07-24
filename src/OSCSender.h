@@ -13,6 +13,8 @@ struct EventData {
 
 struct CVData {
     int    channelIdx    = 0;
+    int    frameSequence = 0;
+    float  timestamp     = 0.f;
     float  flowMagnitude = 0.f;
     float  flowAngle     = 0.f;
     float  motionEnergy  = 0.f;
@@ -26,7 +28,18 @@ struct CVData {
     float contourLength = 0.f;
 
     EventData events;
-    int       scoreMode = 0;
+    int         scoreMode     = 0;
+    int         scoreRevision = 0;
+    std::string videoName;
+    float       videoPosition = 0.f;
+    float       videoDuration = 0.f;
+    int         videoRevision = 0;
+    int         videoPlanType = 0;
+    int         videoShared = 0;
+    int         temporalPhase = 0;
+    float       speedMultiplier = 1.f;
+    int         clearPhase = 0;
+    float       clearAlpha = 0.f;
 };
 
 class OSCSender {

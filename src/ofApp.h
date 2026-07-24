@@ -4,13 +4,15 @@
 #include "ClipPool.h"
 #include "OSCSender.h"
 #include "GlobalDirector.h"
+#include "VideoDirector.h"
 
 class ChannelApp : public ofBaseApp {
 public:
     ChannelApp(Channel* ch, int idx, int w, int h,
                ClipPool* pool, OSCSender* osc, const CVParams& cvp,
-               GlobalDirector* dir = nullptr)
-        : ch_(ch), idx_(idx), w_(w), h_(h), pool_(pool), osc_(osc), cvp_(cvp), dir_(dir) {}
+               GlobalDirector* dir = nullptr, VideoDirector* videoDir = nullptr)
+        : ch_(ch), idx_(idx), w_(w), h_(h), pool_(pool), osc_(osc), cvp_(cvp),
+          dir_(dir), videoDir_(videoDir) {}
 
     void setup()  override;
     void update() override;
@@ -23,4 +25,5 @@ private:
     OSCSender*       osc_;
     CVParams         cvp_;
     GlobalDirector*  dir_;
+    VideoDirector*   videoDir_;
 };

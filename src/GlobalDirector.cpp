@@ -1,5 +1,4 @@
 #include "GlobalDirector.h"
-#include <fstream>
 
 // Clear color palette — vibrant, high-contrast colors so the effect is unmissable
 static const ofColor kClearPalette[] = {
@@ -14,22 +13,25 @@ static constexpr int kNumClearColors = 6;
 
 // ---------------------------------------------------------------------------
 void GlobalDirector::setup() {
-    lastTime_ = ofGetElapsedTimef();
-
-    // First triggers fire quickly so the effect is immediately testable.
-    // Subsequent triggers use the longer intervals from GlobalDirectorParams.
-    tNextFast_   = lastTime_ + ofRandom(4.f,  8.f);   // fast fwd in ~4-8 s
-    tNextSlow_   = lastTime_ + ofRandom(12.f, 20.f);  // slow-mo after first fast
-    cNextClear_  = lastTime_ + ofRandom(8.f,  16.f);  // first clear in ~8-16 s
+    // Intentionally empty: ofGetElapsedTimef() is not yet reliable when main()
+    // calls setup() before ofRunMainLoop().  Timing is initialized on the first
+    // update() call instead, once the OF timer is properly running.
 }
 
 // ---------------------------------------------------------------------------
 void GlobalDirector::update() {
     double now = ofGetElapsedTimef();
-    double dt  = now - lastTime_;
-    // #region agent log
-    { static long long _lastUpd = 0; long long _ms = (long long)(now*1000); if (_ms - _lastUpd > 2000) { _lastUpd = _ms; std::ofstream _f("/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/.cursor/debug-b4e03e.log", std::ios::app); _f << "{\"sessionId\":\"b4e03e\",\"hypothesisId\":\"E\",\"location\":\"GlobalDirector.cpp:update\",\"message\":\"update called\",\"data\":{\"now\":" << now << ",\"dt\":" << dt << ",\"dtMs\":" << (dt*1000) << ",\"dtPasses\":" << (dt>=0.0005?1:0) << ",\"tPhase\":" << (int)tPhase_ << ",\"cPhase\":" << (int)cPhase_ << ",\"tTimer\":" << tTimer_ << ",\"cTimer\":" << cTimer_ << ",\"cAlpha\":" << cAlpha_ << "},\"timestamp\":" << _ms << "}\n"; } }
-    // #endregion
+
+    // First call: initialize timing after the OF timer is stable.
+    if (lastTime_ < 0.0) {
+        lastTime_   = now;
+        tNextFast_  = now + ofRandom(4.f,  8.f);
+        tNextSlow_  = now + ofRandom(12.f, 20.f);
+        cNextClear_ = now + ofRandom(8.f,  16.f);
+        return;
+    }
+
+    double dt = now - lastTime_;
     if (dt < 0.0005) return;   // skip duplicate calls within same rendering frame
     lastTime_ = now;
 
@@ -168,9 +170,6 @@ float GlobalDirector::getSpeedMultiplier() const {
 
 // ---------------------------------------------------------------------------
 void GlobalDirector::triggerSlow() {
-    // #region agent log
-    { std::ofstream _f("/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/.cursor/debug-b4e03e.log", std::ios::app); _f << "{\"sessionId\":\"b4e03e\",\"hypothesisId\":\"B\",\"location\":\"GlobalDirector.cpp:triggerSlow\",\"message\":\"triggerSlow entered\",\"data\":{\"tPhase\":" << (int)tPhase_ << ",\"accepted\":" << (tPhase_==TemporalPhase::Idle?1:0) << "},\"timestamp\":" << (long long)(ofGetElapsedTimef()*1000) << "}\n"; }
-    // #endregion
     if (tPhase_ != TemporalPhase::Idle) return;
     tPhase_ = TemporalPhase::SlowRampDown;
     tTimer_ = 0.0;
@@ -181,9 +180,6 @@ void GlobalDirector::triggerSlow() {
 }
 
 void GlobalDirector::triggerFast() {
-    // #region agent log
-    { std::ofstream _f("/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/.cursor/debug-b4e03e.log", std::ios::app); _f << "{\"sessionId\":\"b4e03e\",\"hypothesisId\":\"B\",\"location\":\"GlobalDirector.cpp:triggerFast\",\"message\":\"triggerFast entered\",\"data\":{\"tPhase\":" << (int)tPhase_ << ",\"accepted\":" << (tPhase_==TemporalPhase::Idle?1:0) << "},\"timestamp\":" << (long long)(ofGetElapsedTimef()*1000) << "}\n"; }
-    // #endregion
     if (tPhase_ != TemporalPhase::Idle) return;
     tPhase_ = TemporalPhase::FastRampUp;
     tTimer_ = 0.0;
@@ -194,13 +190,10 @@ void GlobalDirector::triggerFast() {
 }
 
 void GlobalDirector::triggerClear(ofColor color) {
-    // #region agent log
-    { std::ofstream _f("/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/.cursor/debug-b4e03e.log", std::ios::app); _f << "{\"sessionId\":\"b4e03e\",\"hypothesisId\":\"B\",\"location\":\"GlobalDirector.cpp:triggerClear\",\"message\":\"triggerClear entered\",\"data\":{\"cPhase\":" << (int)cPhase_ << ",\"accepted\":" << (cPhase_==ClearPhase::Idle?1:0) << ",\"r\":" << (int)color.r << ",\"g\":" << (int)color.g << ",\"b\":" << (int)color.b << "},\"timestamp\":" << (long long)(ofGetElapsedTimef()*1000) << "}\n"; }
-    // #endregion
     if (cPhase_ != ClearPhase::Idle) return;
 
-    // If caller didn't specify a color, cycle through the palette
-    if (color == ofColor(0) && color.a == 255) {
+    // alpha == 0 is the sentinel for "no color specified — cycle the palette"
+    if (color.a == 0) {
         cColor_ = kClearPalette[cColorIdx_ % kNumClearColors];
         cColorIdx_++;
     } else {
