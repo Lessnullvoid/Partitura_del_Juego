@@ -18,70 +18,78 @@ La instalación no intenta analizar ni interpretar el partido. Usa el movimiento
 
 La instalación completa corre en dos ordenadores conectados por red local. Cada máquina ejecuta la misma aplicación openFrameworks gestionando cuatro canales y cuatro monitores en vertical. Una capa de sincronización de red (en desarrollo) mantiene el estado del `GlobalDirector` coherente entre ambas máquinas. El motor de audio SuperCollider corre en una máquina y recibe OSC de ambas.
 
-```
- ╔══════════════════════════════════════════════════════╗
- ║  MÁQUINA A  (canales 0–3)                            ║
- ║                                                      ║
- ║  settings.json                                       ║
- ║        |                                             ║
- ║   ClipPool ── historial anti-repetición por canal    ║
- ║        |      getIndependentClip / getSharedClip     ║
- ║        |                                             ║
- ║   VideoDirector ─── planificación cinematográfica    ║
- ║        |  ShortFragment / LongFragment / FullVideo   ║
- ║        |  eventos compartidos periódicos             ║
- ║        |                                             ║
- ║   [4 x Channel] ◄─── recibe VideoPlan               ║
- ║        |                                             ║
- ║   ofVideoPlayer ──── fotograma color                 ║
- ║        |                                             ║
- ║   CVPipeline (OpenCV)                                ║
- ║        |  sustracción de fondo · flujo óptico        ║
- ║        |  contornos · seguimiento de blobs           ║
- ║        |                                             ║
- ║   EventDetector                                      ║
- ║        |  colisión · balón · multitud · piernas      ║
- ║        |                                             ║
- ║   GraphicScore ──── 13 modos visuales                ║
- ║        |            secuencia automática             ║
- ║        |                                             ║
- ║   4 x pantalla vertical (1080 × 1920)                ║
- ║        |                                             ║
- ║   OSCSender ─────────────────────────────────────────╬──> SuperCollider
- ║        |     3 bundles UDP / fotograma (~30 fps)     ║    pdj_datamatics.scd
- ║        |     → SC host:9001                         ║    pdj_mode_voices.scd
- ║        |                                             ║
- ║   GlobalDirector ◄── sync en red (en desarrollo)     ║
- ║        |  slow-mo · fast-fwd · borrado               ║
- ║        |  broadcast a Máquina B                      ║
- ║        |                                             ║
- ║   ControlApp (ImGui)                                 ║
- ║        Overview · Global Director · Channel Editor   ║
- ╚══════════════════════╦═════════════════════════════════╝
-                        ║  LAN — sync director
-                        ║  (OSC/TCP, en desarrollo)
- ╔══════════════════════╩═════════════════════════════════╗
- ║  MÁQUINA B  (canales 4–7)                             ║
- ║  [mismo pipeline — ClipPool · VideoDirector           ║
- ║   CVPipeline · EventDetector · GraphicScore]          ║
- ║                                                       ║
- ║   4 x pantalla vertical (1080 × 1920)                 ║
- ║        |                                             ║
- ║   OSCSender ─────────────────────────────────────────╬──> SuperCollider
- ║        |     canales 4–7 → SC host:9001             ║    (misma instancia)
- ║        |                                             ║
- ║   GlobalDirector ◄── sync en red (en desarrollo)     ║
- ╚══════════════════════════════════════════════════════╝
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","secondaryColor":"#1a1a1a","tertiaryColor":"#101010","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8","edgeLabelBackground":"#1a1a1a"}}}%%
+flowchart TB
+    subgraph MA["MÁQUINA A · canales 0-3"]
+        direction TB
+        A_SET["settings.json"]
+        A_POOL["ClipPool<br/>historial anti-repetición por canal<br/>getIndependentClip / getSharedClip"]
+        A_DIR["VideoDirector<br/>planificación cinematográfica<br/>ShortFragment / LongFragment / FullVideo"]
+        A_CH["4 × Channel<br/>recibe VideoPlan · ofVideoPlayer"]
+        A_CV["CVPipeline — OpenCV<br/>sustracción de fondo · flujo óptico<br/>contornos · seguimiento de blobs"]
+        A_EV["EventDetector<br/>colisión · balón · multitud · piernas"]
+        A_GS["GraphicScore<br/>13 modos visuales · secuencia automática"]
+        A_SCR["4 × pantalla vertical<br/>1080 × 1920"]
+        A_OSC["OSCSender<br/>3 bundles UDP / fotograma · 30 fps"]
+        A_GD["GlobalDirector<br/>slow-mo · fast-fwd · borrado"]
+        A_UI["ControlApp — ImGui<br/>Overview · Global Director · Channel Editor"]
 
-  Distribución física (instalación):
-  ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
-  │ Ch 0 │ Ch 1 │ Ch 2 │ Ch 3 │ Ch 4 │ Ch 5 │ Ch 6 │ Ch 7 │
-  │      │      │      │      │      │      │      │      │
-  │  A   │  A   │  A   │  A   │  B   │  B   │  B   │  B   │
-  └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
-       Máquina A (4 salidas)          Máquina B (4 salidas)
-                    8640 px de ancho total
+        A_SET --> A_POOL --> A_DIR --> A_CH --> A_CV --> A_EV --> A_GS --> A_SCR
+        A_EV --> A_OSC
+        A_UI --> A_GD
+        A_GD --> A_CH
+        A_GD --> A_GS
+    end
+
+    subgraph MB["MÁQUINA B · canales 4-7"]
+        direction TB
+        B_PIPE["mismo pipeline<br/>ClipPool · VideoDirector<br/>CVPipeline · EventDetector · GraphicScore"]
+        B_SCR["4 × pantalla vertical<br/>1080 × 1920"]
+        B_OSC["OSCSender<br/>canales 4-7"]
+        B_GD["GlobalDirector<br/>réplica del estado"]
+
+        B_GD --> B_PIPE
+        B_PIPE --> B_SCR
+        B_PIPE --> B_OSC
+    end
+
+    SC["SuperCollider<br/>pdj_datamatics.scd<br/>pdj_mode_voices.scd"]
+    AUD["Sistema Midas<br/>salida de sala"]
+
+    A_OSC -->|"OSC · host:9001"| SC
+    B_OSC -->|"OSC · host:9001"| SC
+    SC --> AUD
+    A_GD -.->|"LAN — sync director<br/>OSC/UDP · en desarrollo"| B_GD
+
+    classDef out fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
+    classDef ev fill:#1a0606,stroke:#ff2b2b,color:#ff7a7a
+    classDef osc fill:#050c1c,stroke:#3a7bff,color:#84aaff
+    class A_SCR,B_SCR out
+    class A_EV,A_GD,B_GD ev
+    class A_OSC,B_OSC,SC,AUD osc
 ```
+
+**Distribución física de los ocho canales:**
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8"}}}%%
+flowchart LR
+    subgraph BA["Máquina A · 4 salidas HDMI"]
+        direction LR
+        P0["Ch 0"] ~~~ P1["Ch 1"] ~~~ P2["Ch 2"] ~~~ P3["Ch 3"]
+    end
+    subgraph BB["Máquina B · 4 salidas HDMI"]
+        direction LR
+        P4["Ch 4"] ~~~ P5["Ch 5"] ~~~ P6["Ch 6"] ~~~ P7["Ch 7"]
+    end
+    BA ~~~ BB
+
+    classDef out fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
+    class P0,P1,P2,P3,P4,P5,P6,P7 out
+```
+
+Cada monitor es 9:16 en vertical a 1080 × 1920 px. Anchura lógica total del sistema: 8640 px.
 
 ---
 
@@ -89,30 +97,47 @@ La instalación completa corre en dos ordenadores conectados por red local. Cada
 
 Cada canal ejecuta un pipeline OpenCV independiente en cada fotograma. El vídeo se escala a la mitad de resolución para el análisis (FBO de 270×480 px), manteniendo la ruta de visualización en GPU a resolución completa (1080×1920 px).
 
-```
-  ofVideoPlayer (resolución completa)
-        |
-        ├──► bwFbo  (1080×1920) — shader B&W → GraphicScore
-        |
-        └──► cvFbo  (270×480)  — readToPixels → grayscale
-                  |
-            CVPipeline::update()
-                  |
-        ┌─────────┴──────────────────────────────────┐
-        │                                            │
-   BackgroundSubtractorMOG2          FlowFarneback
-   máscara binaria de primer plano   campo de velocidades 2D
-        │                                 │
-   ContourFinder                     flowMagnitude
-   blobs seguidos (hasta 8)          flowAngle
-   centroid · velocity · area · bb        │
-        │                                 │
-   Canny edges                      motionEnergy
-   imagen de bordes                  (mean abs diff)
-        │
-   EventDetector
-        │
-   CVData → OSCSender
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8","edgeLabelBackground":"#1a1a1a"}}}%%
+flowchart TB
+    VP["ofVideoPlayer<br/>resolución completa"]
+    BWF["bwFbo — 1080 × 1920<br/>shader bw.frag"]
+    CVF["cvFbo — 270 × 480<br/>readToPixels → grayscale"]
+    UPD["CVPipeline::update()"]
+
+    MOG["BackgroundSubtractorMOG2<br/>máscara binaria de primer plano"]
+    FLOW["FlowFarneback<br/>campo de velocidades 2D"]
+    CF["ContourFinder<br/>blobs seguidos · hasta 8<br/>centroid · velocity · area · bbox"]
+    CANNY["Canny edges<br/>imagen de bordes"]
+    FM["flowMagnitude<br/>flowAngle"]
+    ME["motionEnergy<br/>mean abs diff"]
+
+    ED["EventDetector"]
+    CVD["CVData"]
+    GS["GraphicScore"]
+    OSC["OSCSender"]
+
+    VP --> BWF --> GS
+    VP --> CVF --> UPD
+    UPD --> MOG
+    UPD --> FLOW
+    UPD --> ME
+    MOG --> CF
+    MOG --> CANNY
+    FLOW --> FM
+    CF --> ED
+    CANNY --> GS
+    ED --> CVD
+    FM --> CVD
+    ME --> CVD
+    CVD --> OSC
+
+    classDef out fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
+    classDef ev fill:#1a0606,stroke:#ff2b2b,color:#ff7a7a
+    classDef osc fill:#050c1c,stroke:#3a7bff,color:#84aaff
+    class GS out
+    class ED ev
+    class CVD,OSC osc
 ```
 
 ### Sustracción de fondo
@@ -151,16 +176,41 @@ Canny opera sobre el fotograma en escala de grises con umbrales bajo/alto config
 
 La partitura gráfica cicla a través de 13 modos de renderizado secuenciados automáticamente. Cada modo dura un tiempo aleatorio entre `minModeDuration` y `maxModeDuration` segundos. Se inserta una pausa `BwClean` entre cada modo activo, enmarcando cada técnica como un episodio diferenciado.
 
+`buildSequence()` recorre 19 modos activos por ciclo. Cada técnica entra desde el negro filmado y vuelve a él, de modo que la pausa es el eje de toda la partitura:
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","edgeLabelBackground":"#1a1a1a"}}}%%
+flowchart LR
+    BW{{"BwClean<br/>pausa entre modos"}}
+
+    BW -->|01| S01["ScanLine"]
+    BW -->|02| S02["VideoNumbers"]
+    BW -->|03| S03["BBoxTracker"]
+    BW -->|04| S04["ThermalVision"]
+    BW -->|05| S05["VideoNormal"]
+    BW -->|06| S06["SlitScan"]
+    BW -->|07| S07["VideoLines"]
+    BW -->|08| S08["Waveform"]
+    BW -->|09| S09["VideoSquares"]
+    BW -->|10| S10["BinaryText"]
+    BW -->|11| S11["ThermalVision"]
+    BW -->|12| S12["VideoNumbers"]
+    BW -->|13| S13["SlitScan"]
+    BW -->|14| S14["GridData"]
+    BW -->|15| S15["VideoNormal"]
+    BW -->|16| S16["VideoLines"]
+    BW -->|17| S17["Barcode"]
+    BW -->|18| S18["ThermalVision"]
+    BW -->|19| S19["VideoSquares"]
+    S19 -.->|"ciclo"| BW
+
+    classDef pause fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
+    classDef rep fill:#1a0606,stroke:#ff2b2b,color:#ff7a7a
+    class BW pause
+    class S04,S11,S18 rep
 ```
-  Secuencia interna (buildSequence):
-  BwClean → ScanLine → BwClean → VideoNumbers → BwClean → BBoxTracker →
-  BwClean → ThermalVision → BwClean → VideoNormal → BwClean → SlitScan →
-  BwClean → VideoLines → BwClean → Waveform → BwClean → VideoSquares →
-  BwClean → BinaryText → BwClean → ThermalVision → BwClean → VideoNumbers →
-  BwClean → SlitScan → BwClean → GridData → BwClean → VideoNormal →
-  BwClean → VideoLines → BwClean → Barcode → BwClean → ThermalVision →
-  BwClean → VideoSquares → BwClean → ScanLine → (ciclo)
-```
+
+En rojo, las tres apariciones de `ThermalVision` — el estribillo más marcado del ciclo. `SlitScan`, `VideoLines`, `VideoNumbers`, `VideoNormal` y `VideoSquares` reaparecen dos veces cada uno; `BBoxTracker`, `Waveform`, `BinaryText`, `GridData` y `Barcode` suenan una sola vez por ciclo.
 
 ### Base fílmica — shader B&W (`bw.frag`)
 
@@ -229,16 +279,37 @@ La secuencia en `buildSequence()` prescribe un orden fijo de técnicas separadas
 
 `GlobalDirector` aplica manipulación temporal a todos los canales simultáneamente. Tres procesos independientes en máquina de estados propia:
 
-```
-  Proceso temporal:
-  Idle ──trigger──► SlowRampDown (0,40 s) ──► SlowHold (2–4 s) ──► SlowRampUp (0,60 s) ──► Idle
-  Idle ──trigger──► FastRampUp  (0,15 s) ──► FastHold (2–4 s) ──► FastRampDown (0,20 s) ──► Idle
+**Proceso temporal** — cámara lenta y avance rápido comparten el estado `Idle`, por lo que son mutuamente excluyentes:
 
-  Proceso de borrado:
-  Idle ──trigger──► FadeIn (0,20 s) ──► Hold (0,8–2,0 s) ──► FadeOut (0,45 s) ──► Idle
-
-  Todos los ramps usan ease Hermite: t² × (3 − 2t)
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","labelColor":"#e8e8e8","transitionColor":"#8a8a8a","transitionLabelColor":"#c8c8c8"}}}%%
+stateDiagram-v2
+    direction LR
+    [*] --> Idle
+    Idle --> SlowRampDown : trigger Slow Mo
+    SlowRampDown --> SlowHold : 0,40 s
+    SlowHold --> SlowRampUp : 2-4 s al 30% de velocidad
+    SlowRampUp --> Idle : 0,60 s
+    Idle --> FastRampUp : trigger Fast Fwd
+    FastRampUp --> FastHold : 0,15 s
+    FastHold --> FastRampDown : 2-4 s al 350% de velocidad
+    FastRampDown --> Idle : 0,20 s
 ```
+
+**Proceso de borrado** — independiente del temporal, puede solaparse con él:
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","labelColor":"#e8e8e8","transitionColor":"#ff2b2b","transitionLabelColor":"#ff7a7a"}}}%%
+stateDiagram-v2
+    direction LR
+    [*] --> Idle
+    Idle --> FadeIn : trigger Clear Black / Clear Red
+    FadeIn --> Hold : 0,20 s
+    Hold --> FadeOut : 0,8-2,0 s
+    FadeOut --> Idle : 0,45 s
+```
+
+Todos los ramps usan ease Hermite: `t² × (3 − 2t)`.
 
 | Parámetro | Valor por defecto |
 |---|---|
@@ -255,22 +326,35 @@ Los disparadores manuales (Slow Mo, Fast Fwd, Clear Black, Clear Red) están dis
 
 `VideoDirector` es el director cinematográfico del material de archivo. Gestiona qué clip se reproduce en cada canal, desde qué punto y durante cuánto tiempo, introduciendo además **eventos compartidos** donde los cuatro canales reproducen el mismo fragmento simultáneamente.
 
-```
-  VideoDirector::update() — se llama cada fotograma
-        |
-        ├── Programación independiente por canal
-        │       ClipPool::getIndependentClip()
-        │       → VideoPlan (ShortFragment | LongFragment | FullVideo)
-        │       → startFraction aleatorio en el clip
-        │       → requestedDuration dentro del rango configurado
-        │
-        └── Evento compartido periódico (cada 2–5 min por defecto)
-                ClipPool::getSharedClip()
-                ├── beginShared(): mismo VideoPlan enviado a los 4 canales
-                ├── Estado Loading → todos los canales reportan reportReady()
-                ├── Estado WaitingToStart → espera sharedStartDelay (0,35 s)
-                ├── Estado Playing → sharedMediaSeconds_ avanza con el tiempo real
-                └── finishShared(): cada canal vuelve a planificación independiente
+`VideoDirector::update()` se llama cada fotograma y alterna entre dos regímenes: programación independiente por canal y, periódicamente, el evento compartido con su protocolo de arranque sincronizado.
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","actorBkg":"#141414","actorTextColor":"#e8e8e8","actorBorder":"#707070","actorLineColor":"#4a4a4a","signalColor":"#8a8a8a","signalTextColor":"#e8e8e8","labelBoxBkgColor":"#141414","labelBoxBorderColor":"#707070","labelTextColor":"#e8e8e8","loopTextColor":"#e8e8e8","noteBkgColor":"#1a0606","noteTextColor":"#ff7a7a","noteBorderColor":"#ff2b2b","sequenceNumberColor":"#0a0a0a"}}}%%
+sequenceDiagram
+    autonumber
+    participant VD as VideoDirector
+    participant CP as ClipPool
+    participant CH as 4 × Channel
+
+    rect rgb(18,18,18)
+    Note over VD,CH: Programación independiente — por canal
+    VD->>CP: getIndependentClip(canal)
+    CP-->>VD: clip fuera del historial de 3
+    VD->>CH: VideoPlan · tipo · startFraction · requestedDuration · revision
+    CH->>CH: seek al punto de inicio · segmentStart / segmentEnd
+    CH-->>VD: reportFinished() al terminar el segmento
+    end
+
+    rect rgb(26,6,6)
+    Note over VD,CH: Evento compartido — cada 2-5 min
+    VD->>CP: getSharedClip()
+    CP-->>VD: clip compartido no usado recientemente
+    VD->>CH: beginShared() — mismo VideoPlan a los 4 canales
+    CH-->>VD: reportReady() — clip cargado, inicio calculado
+    VD->>VD: WaitingToStart — espera sharedStartDelay 0,35 s
+    VD->>CH: Playing — sharedMediaSeconds_ avanza con el tiempo real
+    VD->>CH: finishShared() — vuelta a planificación independiente
+    end
 ```
 
 **Tipos de plan:**
@@ -359,39 +443,51 @@ El motor comprende dos archivos:
 - **`pdj_datamatics.scd`** — motor principal: infraestructura de buses, SynthDefs de infraestructura, sistema de formas, conductor de datos, secuenciador binario en cuadrícula, manejadores OSC y vigilancia de telemetría.
 - **`pdj_mode_voices.scd`** — voces escénicas específicas por modo: un SynthDef por cada uno de los 13 modos del ScoreMode, más `pdjKick`.
 
-```
-  pdj_datamatics.scd (motor principal)
-        |
-        ├── Infraestructura de buses
-        │       ~fxBus (audio) · ~delayBus (audio) · ~selfBus (control)
-        │       ~gNoiseBus · ~gDensityBus · ~gSpaceBus · ~gCrushBus
-        │       ~gGate1/2/3Bus · ~gSpectralBus · ~gMotionBus · ~gCrowdBus · ~gTensionBus
-        │
-        ├── SynthDefs de infraestructura
-        │       pdjToneBank · pdjPulseEngine · pdjNoiseBed · pdjSpectralAnchor
-        │       pdjWash · pdjCrackle · pdjSub · pdjClick · pdjGlitch
-        │       pdjImpact · pdjTrace · pdjClearSweep · pdjDelayFX
-        │       pdjSelfAnalysis · pdjMaster
-        │
-        ├── ~dataConductor (4 Hz)
-        │       integra OSC → buses de control
-        │       calcula tensión global, movimiento, multitud, espectro
-        │
-        ├── ~gridClock (0,42 s/paso)
-        │       blob count total → número binario de 8 bits → grid de clicks
-        │
-        └── OSC receive (30 fps desde oF)
-                state/frame · motion · flow · blobs · blob/*/state
-                events · score/mode+revision · video/* · director/*
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8","edgeLabelBackground":"#1a1a1a"}}}%%
+flowchart TB
+    OSCIN["OSC receive — 30 fps desde oF<br/>state/frame · motion · flow · blobs · blob/*/state<br/>events · score/mode+revision · video/* · director/*"]
 
-  pdj_mode_voices.scd (voces por modo)
-        |
-        └── ~installModeVoices → 13 SynthDefs + pdjKick
-                pdjModeBwClean · pdjModeScanLine · pdjModeBBoxTracker
-                pdjModeBinaryText · pdjModeWaveform · pdjModeGridData
-                pdjModeBarcode · pdjModeVideoNormal · pdjModeVideoSquares
-                pdjModeVideoNumbers · pdjModeVideoLines · pdjModeThermal
-                pdjModeSlitScan · pdjModeFlash
+    subgraph ENG["pdj_datamatics.scd · motor principal"]
+        direction TB
+        COND["~dataConductor — 4 Hz<br/>integra OSC → buses de control<br/>tensión global · movimiento · multitud · espectro"]
+        GRID["~gridClock — 0,42 s por paso<br/>blob count total → binario de 8 bits → grid de clicks"]
+        BUSES["Infraestructura de buses<br/>~fxBus · ~delayBus (audio) · ~selfBus (control)<br/>~gNoise · ~gDensity · ~gSpace · ~gCrush<br/>~gGate1/2/3 · ~gSpectral · ~gMotion · ~gCrowd · ~gTension"]
+        MODEH["Manejador score/mode<br/>~modeProfiles → drone · air · pulse<br/>color · space · tension · crush"]
+        INFRA["SynthDefs de infraestructura<br/>15 definiciones — ver tabla siguiente<br/>pdjToneBank · pdjPulseEngine · pdjWash · pdjDelayFX ..."]
+    end
+
+    subgraph VOICES["pdj_mode_voices.scd · voces escénicas por modo"]
+        direction TB
+        IMV["~installModeVoices<br/>13 SynthDefs por modo + pdjKick<br/>envoltura lifeGate común"]
+    end
+
+    subgraph OUTG["cadena de salida"]
+        direction TB
+        MASTER["pdjMaster<br/>soft-clip + limitador"]
+    end
+
+    OUT["Sistema Midas — salida de sala"]
+
+    OSCIN --> COND
+    OSCIN --> GRID
+    OSCIN --> MODEH
+    COND --> BUSES
+    GRID --> INFRA
+    BUSES --> INFRA
+    MODEH --> INFRA
+    BUSES -->|"ampBus · panBus · tensionBus · spectralBus"| IMV
+    MODEH -->|"lifeGate — crossfade en el cambio de modo"| IMV
+    INFRA --> MASTER
+    IMV --> MASTER
+    MASTER --> OUT
+
+    classDef out fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
+    classDef osc fill:#050c1c,stroke:#3a7bff,color:#84aaff
+    classDef ev fill:#1a0606,stroke:#ff2b2b,color:#ff7a7a
+    class OUT out
+    class OSCIN,BUSES osc
+    class GRID ev
 ```
 
 **Voces específicas por modo (`pdj_mode_voices.scd`):**

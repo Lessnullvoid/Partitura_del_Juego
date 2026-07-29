@@ -21,3 +21,4 @@ cortos/
 # Compiled files
 *.o
 *.d
+mermaid-tmp/
