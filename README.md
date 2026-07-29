@@ -660,3 +660,60 @@ make && bin/Partitura_del_Juego
 ```
 
 **Orden de arranque:** iniciar primero la Máquina A (SuperCollider y director listos) y después la Máquina B. La ControlApp de la Máquina A es la superficie de control principal de la instalación completa.
+
+---
+
+## Mapa técnico de la instalación
+
+![Mapa de conexiones de la instalación](img/mapa.png)
+
+El mapa describe el cableado físico de la instalación completa: ocho pantallas verticales, dos ordenadores, la consola de audio, el router de red local y la distribución eléctrica. Los colores del diagrama codifican el tipo de línea:
+
+| Color | Tipo de línea |
+|---|---|
+| Rojo | Alimentación 120 V desde multicontacto |
+| Gris | Señal — HDMI (vídeo) y Ethernet (red) |
+| Verde | Nodo de red — modem / router de la LAN |
+
+### Lista de equipo
+
+| Cant. | Equipo | Función en el sistema |
+|---|---|---|
+| 8 | Monitor / pantalla 1080 × 1920 (9:16, montaje en vertical) | Una pantalla por canal — salida de `GraphicScore`. Rotadas a modo retrato desde el sistema operativo |
+| 2 | Ordenador (comp 1 / comp 2) con 4 salidas de vídeo cada uno | Cada máquina ejecuta una instancia de `Partitura_del_Juego` con 4 canales. Requieren GPU capaz de sostener 4 × 1080×1920 a 30 fps |
+| 1 | Consola / sistema de audio Midas | Salida y mezcla del motor SuperCollider hacia el sistema de sala |
+| 1 | Modem / router con switch Gigabit | LAN de la instalación — transporta el OSC de sincronización del `GlobalDirector` y el OSC de datos hacia SuperCollider |
+| 8 | Cable HDMI | Un cable por pantalla, 4 desde cada ordenador |
+| 3 | Cable Ethernet Cat5e/Cat6 | comp 1 → router, comp 2 → router, y enlace de red hacia el sistema Midas |
+| 2 | Multicontacto / regleta a 120 V | Un multicontacto por banco: alimenta 4 pantallas + 1 ordenador |
+| 1 | Adaptador de teclado/ratón o control remoto en la máquina primaria | Acceso a la ControlApp (tecla `U`) durante la función |
+
+Opcionales según sala: extensiones eléctricas, canaletas o cinta gaffer para el cableado, y un monitor auxiliar para la ControlApp (el `settings.json` de instalación ya reserva una ventana de control de 1280 × 800).
+
+### Descripción del setup
+
+**Reparto de vídeo.** Cada ordenador alimenta cuatro pantallas por HDMI. Un ordenador corre los canales 0–3 (pantallas 1–4) y el otro los canales 4–7 (pantallas 5–8), exactamente el reparto descrito en *Ocho canales en dos máquinas*. En cada máquina, el `settings.json` usa el preset `_installationLayout` y las coordenadas `x` de las cuatro ventanas se ajustan a la posición real de sus monitores en el escritorio extendido.
+
+**Red.** Ambos ordenadores se conectan al router por Ethernet cableado (nunca Wi-Fi: la sincronización del `GlobalDirector` y los tres bundles OSC por fotograma dependen de latencia estable). El router solo se usa como switch de la instalación; no requiere salida a internet. La máquina primaria es la que corre SuperCollider y actúa como autoridad del director; en la secundaria, `osc.host` apunta a la IP de la primaria.
+
+**Audio.** SuperCollider corre en una sola máquina y recibe el OSC de los ocho canales. Su salida va al sistema Midas a través del enlace de red del diagrama (o por interfaz de audio si se prefiere salida analógica), y desde ahí al sistema de sala. La máquina que sostiene el audio es la única que necesita `pdj_datamatics.scd` cargado, con `~numChannels = 8` y `~channelBases` ampliado a ocho canales.
+
+**Eléctrico.** Cada banco de cuatro pantallas comparte multicontacto con su ordenador, y ambos multicontactos parten de la misma fase de 120 V para evitar bucles de masa entre los bancos y la consola de audio. Consumo estimado: 8 pantallas + 2 ordenadores, a dimensionar según el modelo exacto de monitor antes de asignar circuitos.
+
+**Orden de encendido.** Multicontactos → pantallas (verificar rotación a vertical) → router → máquina primaria (`make && bin/Partitura_del_Juego`, después SuperCollider) → máquina secundaria. Apagado en orden inverso.
+
+---
+
+## Referencia de montaje
+
+Las dos vistas siguientes son la referencia espacial del montaje: las pantallas no forman un muro continuo sino que se dispersan por la sala sobre estructuras tubulares verticales de suelo a techo, de modo que el público camina entre ellas y nunca ve las ocho a la vez.
+
+![Vista de montaje 1 — dispersión de las ocho pantallas verticales](img/setup1.jpeg)
+
+Cada estructura sostiene uno o dos paneles en vertical, sujetos por bridas o abrazaderas a los tubos. Los paneles se montan a la altura del cuerpo (centro de imagen aproximadamente a la altura de la mirada) y ligeramente girados entre sí, sin alineación frontal: las orientaciones cruzadas hacen que el espectador reciba siempre algunas pantallas de frente y otras en ángulo agudo, reforzando la lectura de las ocho columnas como polirritmia y no como una única imagen panorámica.
+
+![Vista de montaje 2 — recorrido y volumen técnico central](img/setup2.jpeg)
+
+La segunda vista muestra la circulación resultante y el volumen cilíndrico negro que concentra la parte técnica del montaje: dentro se ocultan los ordenadores, el multicontacto, el router y el recogido de cables, que suben por los tubos hasta cada panel. La sala se mantiene en penumbra sin iluminación añadida —la única fuente de luz son las propias pantallas—, y el suelo se deja libre de cableado visible.
+
+Nota sobre el ancho lógico: la cifra de 8640 px (8 × 1080) descrita en la arquitectura es la resolución total del sistema, no una dimensión física continua. Cada canal es una imagen autónoma y completa, por lo que el reparto espacial de los paneles puede adaptarse a la planta de cada sala sin modificar el software.
