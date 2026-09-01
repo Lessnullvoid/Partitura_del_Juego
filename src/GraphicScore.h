@@ -60,7 +60,7 @@ struct DatamaticsParams {
     int   videoSquareCount = 6;      // max squares drawn simultaneously
 
     // Slit-scan
-    int   slitStripW = 3;     // pixels stamped per frame (controls scroll speed)
+    int   slitInterval = 20;  // frames between snapshot captures (~0.67 s at 30 fps)
 
     // Manual override (-1 = auto)
     int   forcedMode = -1;
@@ -72,6 +72,8 @@ public:
     // bwTex  = B&W-processed video (from display FBO + shader)
     // rawTex = original color video frame (from player)
     void update(const ofTexture& bwTex, const ofTexture& rawTex, CVPipeline& cv);
+    // Presents a standalone generator or breath frame through the same output FBO.
+    void updateExternal(const ofTexture* texture, float opacity = 1.f);
     void draw(int x, int y, int w, int h);
 
     void onCollision();
@@ -121,13 +123,22 @@ private:
     ofTrueTypeFont labelFont_; // large labels, blob IDs, numbers
     ofImage        edgesImg_;  // reused every frame for VideoLines
 
-    // Slit-scan CPU ring buffer (one column per frame, wraps at kSlitW)
-    static constexpr int kSlitW = 270;   // number of time slices = analysis width
-    static constexpr int kSlitH = 480;   // spatial height = analysis height
-    cv::Mat slitMat_;      // kSlitH × kSlitW, CV_8UC1 — ring of columns
-    int     slitWriteX_ = 0;
-    bool    slitReady_   = false;
-    ofImage slitImage_;   // assembled output uploaded as texture each frame
+    // Slit-scan: continuous column ribbon (classic Form+Code slit-scan)
+    cv::Mat  slitRibbonMat_;   // ring buffer, one column per frame, aW wide
+    int      slitWriteX_ = 0;
+    float    slitSrcXNorm_   = 0.5f;  // smoothed sample-column position (0..1), follows motion
+    float    slitStepAccum_  = 0.f;   // fractional accumulator for variable-speed writes
+
+    // Slit-scan: stroboscopic ghost superposition (frozen moments overlay)
+    static constexpr int kSlitLayers = 7;    // frozen moments shown simultaneously
+    cv::Mat  slitFrames_[kSlitLayers];       // circular buffer of full gray frames
+    int      slitLayerWrite_   = 0;          // next write slot
+    int      slitLayersFilled_ = 0;          // slots with valid data (0..kSlitLayers)
+    int      slitFrameCount_   = 0;          // frames elapsed since last capture
+    cv::Mat  slitGhostMat_;   // cached composited ghost layer (recomputed on capture)
+
+    bool     slitReady_ = false;
+    ofImage  slitImage_;      // final ribbon+ghost composite uploaded every frame
 
     DatamaticsParams params_;
     int  w_ = 0, h_ = 0;

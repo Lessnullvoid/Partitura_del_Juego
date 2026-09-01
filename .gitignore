@@ -10,6 +10,7 @@
 obj/
 bin/Partitura_del_Juego.app
 bin/Partitura_del_Juego.app.dSYM
+dist/
 
 # Video clips (large binary files — store separately)
 bin/data/cortos/
@@ -22,3 +23,9 @@ cortos/
 *.o
 *.d
 mermaid-tmp/
+bin/data/performance_reports/
+
+# Preservation binaries (notes and settings stay tracked)
+archives/**/*.app/
+archives/**/*.app.dSYM/
+archives/**/imgui.ini

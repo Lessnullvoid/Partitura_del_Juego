@@ -1,64 +1,234 @@
 {
+    "_installationControl": {
+        "height": 800,
+        "width": 1280,
+        "x": 4320,
+        "y": 0
+    },
+    "_installationLayout": [
+        {
+            "height": 1920,
+            "width": 1080,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "height": 1920,
+            "width": 1080,
+            "x": 1080,
+            "y": 0
+        },
+        {
+            "height": 1920,
+            "width": 1080,
+            "x": 2160,
+            "y": 0
+        },
+        {
+            "height": 1920,
+            "width": 1080,
+            "x": 3240,
+            "y": 0
+        }
+    ],
+    "_installationLayout_comment": "4 vertical 1080x1920 monitors — swap in for installation:",
+    "_note": "ICUIXIAN 0104-XZ vertical mode requires two independent 1920x1080@60 inputs. Use Configure ICUIXIAN outputs in the GUI to detect, switch and save their actual desktop positions.",
+    "_testLayout": [
+        {
+            "height": 480,
+            "width": 270,
+            "x": 0,
+            "y": 40
+        },
+        {
+            "height": 480,
+            "width": 270,
+            "x": 270,
+            "y": 40
+        },
+        {
+            "height": 480,
+            "width": 270,
+            "x": 540,
+            "y": 40
+        },
+        {
+            "height": 480,
+            "width": 270,
+            "x": 810,
+            "y": 40
+        }
+    ],
+    "_testLayout_comment": "Small 9:16 test windows (all on built-in) — swap in if no external monitor:",
+    "_testSingleWindow": {
+        "height": 1080,
+        "width": 1920,
+        "x": 0,
+        "y": 40
+    },
+    "_testSingleWindow_comment": "Half-resolution test on a laptop screen (each segment = 480x1080). Swap into singleWindow to use:",
+    "channels": [
+        {
+            "height": 854,
+            "width": 480,
+            "x": 1512,
+            "y": 50
+        },
+        {
+            "height": 854,
+            "width": 480,
+            "x": 1992,
+            "y": 50
+        },
+        {
+            "height": 854,
+            "width": 480,
+            "x": 2472,
+            "y": 50
+        },
+        {
+            "height": 854,
+            "width": 480,
+            "x": 2952,
+            "y": 50
+        },
+        {
+            "height": 854,
+            "width": 480,
+            "x": 1512,
+            "y": 904
+        },
+        {
+            "height": 854,
+            "width": 480,
+            "x": 1992,
+            "y": 904
+        },
+        {
+            "height": 854,
+            "width": 480,
+            "x": 2472,
+            "y": 904
+        },
+        {
+            "height": 854,
+            "width": 480,
+            "x": 2952,
+            "y": 904
+        }
+    ],
+    "clips": {
+        "folder": "../../cortos"
+    },
+    "controlWindow": {
+        "height": 900,
+        "width": 1400,
+        "x": 30,
+        "y": 40
+    },
+    "cv": {
+        "analysisEveryNFrames": 1,
+        "bgSubHistory": 120,
+        "bgSubThreshold": 25.0,
+        "blobMaxArea": 200000,
+        "blobMinArea": 500,
+        "eightChannelEveryNFrames": 2,
+        "flowWindowSize": 8,
+        "halfRes": true
+    },
+    "generators": {
+        "density": 0.5,
+        "detailTier": 2,
+        "intensity": 0.65,
+        "showHud": false
+    },
     "osc": {
         "host": "localhost",
         "port": 9001
     },
-    "clips": {
-        "folder": "../../cortos"
+    "outputMode": "dualWindow8",
+    "performanceTest": {
+        "durationSeconds": 600.0,
+        "reportIntervalSeconds": 5.0,
+        "thresholds": {
+            "lateFrameMs": 50.0,
+            "maximumLatePercent": 0.5,
+            "maximumMemoryGrowthMB": 256.0,
+            "minimumFps": 29.0,
+            "p95FrameMs": 38.0,
+            "stallFrameMs": 100.0
+        },
+        "warmupSeconds": 10.0
     },
-
-    "channels": [
-        { "x": 1512, "y": 50, "width": 480, "height": 854 },
-        { "x": 1992, "y": 50, "width": 480, "height": 854 },
-        { "x": 2472, "y": 50, "width": 480, "height": 854 },
-        { "x": 2952, "y": 50, "width": 480, "height": 854 }
+    "presentationWindows": [
+        {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "height": 1080,
+            "width": 1920,
+            "x": 1920,
+            "y": 0
+        }
     ],
-    "controlWindow": {
-        "x": 30, "y": 40, "width": 1400, "height": 900
+    "singleWindow": {
+        "height": 2160,
+        "width": 3840,
+        "x": 0,
+        "y": 0
     },
-
     "targetFPS": 30,
-
+    "videoWallController": {
+        "asin": "B0DM98NVSH",
+        "brand": "ICUIXIAN",
+        "controllers": 2,
+        "inputHeight": 1080,
+        "inputWidth": 1920,
+        "layoutPerController": "4x1",
+        "model": "0104-XZ",
+        "refreshHz": 60.0,
+        "rotationDegrees": 90
+    },
     "videoDirector": {
+        "driftTolerance": 0.08,
         "enabled": true,
-        "shortWeight": 0.5,
-        "longWeight": 0.3,
         "fullWeight": 0.2,
-        "shortMin": 8.0,
-        "shortMax": 25.0,
-        "longMin": 30.0,
         "longMax": 120.0,
-        "sharedIntervalMin": 120.0,
+        "longMin": 30.0,
+        "longWeight": 0.3,
         "sharedIntervalMax": 300.0,
+        "sharedIntervalMin": 120.0,
         "sharedStartDelay": 0.35,
-        "driftTolerance": 0.08
+        "shortMax": 25.0,
+        "shortMin": 8.0,
+        "shortWeight": 0.5
     },
-
-    "cv": {
-        "halfRes": true,
-        "flowWindowSize": 8,
-        "blobMinArea": 500,
-        "blobMaxArea": 200000,
-        "bgSubHistory": 120,
-        "bgSubThreshold": 25.0
-    },
-
-    "_note": "External VY279HGR at 1920x1080 sits right of built-in (offset x=1512 for MacBook Pro 14). 4 channels × 480px = 1920px wide. If windows appear on the wrong screen, adjust the x values: try x=0,480,960,1440 to land on built-in, or increase x by the actual built-in width shown in System Settings > Displays.",
-
-    "_testLayout_comment": "Small 9:16 test windows (all on built-in) — swap in if no external monitor:",
-    "_testLayout": [
-        { "x": 0,   "y": 40, "width": 270, "height": 480 },
-        { "x": 270, "y": 40, "width": 270, "height": 480 },
-        { "x": 540, "y": 40, "width": 270, "height": 480 },
-        { "x": 810, "y": 40, "width": 270, "height": 480 }
-    ],
-
-    "_installationLayout_comment": "4 vertical 1080x1920 monitors — swap in for installation:",
-    "_installationLayout": [
-        { "x": 0,    "y": 0, "width": 1080, "height": 1920 },
-        { "x": 1080, "y": 0, "width": 1080, "height": 1920 },
-        { "x": 2160, "y": 0, "width": 1080, "height": 1920 },
-        { "x": 3240, "y": 0, "width": 1080, "height": 1920 }
-    ],
-    "_installationControl": { "x": 4320, "y": 0, "width": 1280, "height": 800 }
+    "visualComposer": {
+        "beatSubdivision": 4,
+        "bpm": 90.0,
+        "breathMaxDuration": 6.0,
+        "breathMinDuration": 2.0,
+        "breathProbability": 0.12,
+        "enabled": false,
+        "generatorMaxDuration": 20.0,
+        "generatorMinDuration": 8.0,
+        "generatorProbability": 0.35,
+        "organizationWeights": [
+            0.2,
+            0.3,
+            0.35,
+            0.15
+        ],
+        "recentHistorySize": 3,
+        "seed": 1346652721,
+        "transitionMaxDuration": 4.0,
+        "transitionMinDuration": 1.0,
+        "transitionProbability": 0.08,
+        "videoMaxDuration": 30.0,
+        "videoMinDuration": 8.0,
+        "videoProbability": 0.45
+    }
 }

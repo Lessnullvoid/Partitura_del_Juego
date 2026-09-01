@@ -7,12 +7,23 @@
 #include "EventDetector.h"
 #include "GlobalDirector.h"
 #include "VideoDirector.h"
+#include "VisualComposer.h"
+#include "VisualGenerator.h"
+#include "PerformanceMonitor.h"
+
+struct GeneratorRuntimeParams {
+    float intensity = 0.65f;
+    float density = 0.5f;
+    bool showHud = false;
+    int detailTier = 2;
+};
 
 class Channel {
 public:
     void setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const CVParams& cvp);
     void update();
     void draw();
+    void drawInRegion(int x, int y, int segW, int segH);
 
     void loadNextClip();
     void play();
@@ -24,6 +35,7 @@ public:
     bool        isPlaying()      const;
     std::string getCurrentClip() const { return currentClip_; }
     int         getIdx()         const { return idx_; }
+    float       getUpdateMilliseconds() const { return updateMilliseconds_; }
 
     CVPipeline&    getCVPipeline()  { return cv_; }
     GraphicScore&  getScore()       { return score_; }
@@ -32,6 +44,13 @@ public:
 
     void setGlobalDirector(GlobalDirector* d) { dir_ = d; }
     void setVideoDirector(VideoDirector* d) { videoDir_ = d; }
+    void setVisualComposer(VisualComposer* c) { composer_ = c; }
+    void setPerformanceMonitor(PerformanceMonitor* monitor) {
+        performanceMonitor_ = monitor;
+    }
+    GeneratorRuntimeParams& generatorParams() { return generatorParams_; }
+    const ChapterState* composerState() const;
+    VisualGenerator& getGenerator() { return generator_; }
     VideoPlanType getVideoPlanType() const { return activePlan_.type; }
     bool isSharedVideoPlan() const { return activePlan_.shared; }
 
@@ -41,6 +60,8 @@ private:
     bool loadVideoPlan(const VideoPlan& plan);
     bool configureLoadedPlan();
     void finishActivePlan();
+    bool updateProceduralChapter();
+    void populateGeneratorOsc(CVData& data) const;
 
     int           idx_ = 0, w_ = 0, h_ = 0;
     std::string   currentClip_;
@@ -49,6 +70,7 @@ private:
     int           videoRevision_ = 0;
     int           scoreRevision_ = 0;
     int           lastScoreMode_ = -1;
+    float         updateMilliseconds_ = 0.f;
     VideoPlan     activePlan_;
     int           appliedPlanRevision_ = 0;
     float         segmentStartSeconds_ = 0.f;
@@ -66,10 +88,17 @@ private:
 
     CVPipeline     cv_;
     GraphicScore   score_;
+    VisualGenerator generator_;
     EventDetector  detector_;
+    GeneratorRuntimeParams generatorParams_;
+    VisualState transferredVisualState_;
+    uint64_t lastComposerRevision_ = 0;
 
     ClipPool*        pool_ = nullptr;
     OSCSender*       osc_  = nullptr;
     GlobalDirector*  dir_  = nullptr;
     VideoDirector*   videoDir_ = nullptr;
+    VisualComposer*  composer_ = nullptr;
+    PerformanceMonitor* performanceMonitor_ = nullptr;
+    ChannelPerformanceSample performanceSample_;
 };

@@ -39,9 +39,10 @@ struct VideoPlan {
 
 class VideoDirector {
 public:
-    static constexpr int kChannelCount = 4;
+    static constexpr int kChannelCount = 8;
 
-    void setup(ClipPool* pool, const VideoDirectorParams& params = {});
+    void setup(ClipPool* pool, const VideoDirectorParams& params = {},
+               int channelCount = 4);
     void update(float globalSpeed = 1.f);
 
     VideoDirectorParams&       params()       { return params_; }
@@ -60,6 +61,7 @@ public:
     float sharedTargetSeconds() const { return sharedMediaSeconds_; }
     float driftTolerance() const { return params_.driftTolerance; }
     float secondsUntilShared() const;
+    int channelCount() const { return channelCount_; }
 
     static const char* planTypeName(VideoPlanType type);
 
@@ -81,6 +83,7 @@ private:
     bool validChannel(int channelIdx) const;
 
     ClipPool* pool_ = nullptr;
+    int channelCount_ = 4;
     VideoDirectorParams params_;
     std::array<VideoPlan, kChannelCount> plans_;
     std::array<ReadyState, kChannelCount> ready_;

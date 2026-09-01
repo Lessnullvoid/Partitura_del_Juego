@@ -1,4 +1,8 @@
 #include "ControlApp.h"
+#include "SettingsStore.h"
+#include <CoreGraphics/CoreGraphics.h>
+#include <cmath>
+#include <cstdlib>
 
 namespace {
 void sectionTitle(const char* title) {
@@ -27,6 +31,41 @@ bool compactSliderInt(const char* label, const char* id, int* value,
     ImGui::SetNextItemWidth(std::min(180.f, ImGui::GetContentRegionAvail().x));
     return ImGui::SliderInt(id, value, minValue, maxValue);
 }
+
+constexpr std::size_t kIcuixianInputWidth = 1920;
+constexpr std::size_t kIcuixianInputHeight = 1080;
+constexpr double kIcuixianRefreshHz = 60.0;
+
+CGDisplayModeRef copyIcuixianInputMode(CGDirectDisplayID displayID) {
+    CFArrayRef modes = CGDisplayCopyAllDisplayModes(displayID, nullptr);
+    if (!modes) return nullptr;
+
+    CGDisplayModeRef best = nullptr;
+    double bestRefreshError = 1000.0;
+    const CFIndex count = CFArrayGetCount(modes);
+    for (CFIndex i = 0; i < count; ++i) {
+        auto mode = static_cast<CGDisplayModeRef>(
+            const_cast<void*>(CFArrayGetValueAtIndex(modes, i)));
+        if (CGDisplayModeGetPixelWidth(mode) != kIcuixianInputWidth ||
+            CGDisplayModeGetPixelHeight(mode) != kIcuixianInputHeight ||
+            CGDisplayModeGetWidth(mode) != kIcuixianInputWidth ||
+            CGDisplayModeGetHeight(mode) != kIcuixianInputHeight) {
+            continue;
+        }
+
+        const double refresh = CGDisplayModeGetRefreshRate(mode);
+        const double refreshError =
+            refresh > 0.0 ? std::abs(refresh - kIcuixianRefreshHz) : 0.5;
+        if (refreshError <= 1.0 && refreshError < bestRefreshError) {
+            best = mode;
+            bestRefreshError = refreshError;
+        }
+    }
+
+    if (best) CFRetain(best);
+    CFRelease(modes);
+    return best;
+}
 }
 
 static const char* kModeNames[] = {
@@ -41,6 +80,9 @@ void ControlApp::setup() {
     gui_.setup();
 
     ImGuiIO& io = ImGui::GetIO();
+    // Do not write imgui.ini beside the executable. In a distributed macOS
+    // bundle that location is signed and must remain immutable after launch.
+    io.IniFilename = nullptr;
     io.Fonts->Clear();
     io.FontDefault =
         io.Fonts->AddFontFromFileTTF("/System/Library/Fonts/SFNS.ttf", 18.f);
@@ -77,9 +119,22 @@ void ControlApp::setup() {
 
     strncpy(oscHostBuf_, osc_->getHost().c_str(), sizeof(oscHostBuf_) - 1);
     oscPort_ = osc_->getPort();
+
+    const ofJson cfg = SettingsStore::load();
+    dualWindowConfigured_ =
+        cfg.is_object() && cfg.value("outputMode", std::string()) == "dualWindow8";
+    if (performance_ && std::getenv("PDJ_PERF_AUTOSTART"))
+        performance_->start(channels_, composer_);
 }
 
-void ControlApp::update() {}
+void ControlApp::update() {
+    if (!performance_) return;
+    performance_->update(channels_, composer_);
+    if (performance_->hasResults() &&
+        std::getenv("PDJ_PERF_EXIT_ON_COMPLETE")) {
+        ofExit(0);
+    }
+}
 
 void ControlApp::draw() {
     if (!showUI_) return;
@@ -110,9 +165,20 @@ void ControlApp::draw() {
             activePage_ = 2;
         ImGui::SameLine();
     }
-    if (ImGui::Selectable("Channel Editor", activePage_ == 3, 0,
+    if (composer_) {
+        if (ImGui::Selectable("Visual Composer", activePage_ == 3, 0,
+                              ImVec2(170.f, 30.f)))
+            activePage_ = 3;
+        ImGui::SameLine();
+    }
+    if (ImGui::Selectable("Channel Editor", activePage_ == 4, 0,
                           ImVec2(170.f, 30.f)))
-        activePage_ = 3;
+        activePage_ = 4;
+    ImGui::SameLine();
+    if (performance_ &&
+        ImGui::Selectable("Performance", activePage_ == 5, 0,
+                          ImVec2(150.f, 30.f)))
+        activePage_ = 5;
     ImGui::Separator();
 
     if (activePage_ == 0) {
@@ -121,6 +187,10 @@ void ControlApp::draw() {
         drawDirectorPanel();
     } else if (activePage_ == 2 && videoDir_) {
         drawVideoDirectorPanel();
+    } else if (activePage_ == 3 && composer_) {
+        drawComposerPanel();
+    } else if (activePage_ == 5 && performance_) {
+        drawPerformancePanel();
     } else {
         ImGui::TextDisabled("EDIT CHANNEL");
         ImGui::SameLine();
@@ -145,6 +215,8 @@ void ControlApp::draw() {
 }
 
 void ControlApp::exit() {
+    if (performance_ && performance_->isRunning())
+        performance_->stop(channels_, composer_, false);
     if (fontTexture_ != 0) {
         glDeleteTextures(1, &fontTexture_);
         fontTexture_ = 0;
@@ -155,8 +227,187 @@ void ControlApp::keyPressed(int key) {
     if (key == 'u' || key == 'U') showUI_ = !showUI_;
 }
 
+bool ControlApp::saveOutputMode(const std::string& mode) {
+    std::string settingsError;
+    ofJson cfg = SettingsStore::load(&settingsError);
+    if (!cfg.is_object()) {
+        outputModeError_ = settingsError.empty()
+            ? "settings.json is missing or invalid" : settingsError;
+        return false;
+    }
+    cfg["outputMode"] = mode;
+    if (!SettingsStore::save(cfg, &settingsError)) {
+        outputModeError_ = settingsError.empty()
+            ? "Could not write settings.json" : settingsError;
+        return false;
+    }
+    outputModeError_.clear();
+    return true;
+}
+
+bool ControlApp::detectAndSaveDualOutputs() {
+    struct DetectedDisplay {
+        CGDirectDisplayID id = kCGNullDirectDisplay;
+        CGRect bounds = CGRectZero;
+        std::size_t physicalArea = 0;
+        bool external = false;
+        bool is4K = false;
+    };
+
+    uint32_t displayCount = 0;
+    if (CGGetActiveDisplayList(0, nullptr, &displayCount) != kCGErrorSuccess ||
+        displayCount < 2) {
+        outputModeError_ = "Two active displays were not detected";
+        return false;
+    }
+
+    std::vector<CGDirectDisplayID> ids(displayCount);
+    if (CGGetActiveDisplayList(displayCount, ids.data(), &displayCount) !=
+        kCGErrorSuccess) {
+        outputModeError_ = "macOS display detection failed";
+        return false;
+    }
+
+    std::vector<DetectedDisplay> external;
+    for (uint32_t i = 0; i < displayCount; ++i) {
+        const CGDirectDisplayID id = ids[i];
+        if (CGDisplayMirrorsDisplay(id) != kCGNullDirectDisplay) continue;
+
+        const std::size_t physicalW = CGDisplayPixelsWide(id);
+        const std::size_t physicalH = CGDisplayPixelsHigh(id);
+        DetectedDisplay display;
+        display.id = id;
+        display.bounds = CGDisplayBounds(id);
+        display.physicalArea = physicalW * physicalH;
+        display.external = CGDisplayIsBuiltin(id) == 0;
+        display.is4K = physicalW >= 3840;
+        if (display.external) external.push_back(display);
+    }
+
+    std::vector<DetectedDisplay> candidates = external;
+    if (candidates.size() < 2) {
+        outputModeError_ =
+            "ICUIXIAN setup requires two independent external displays";
+        return false;
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const DetectedDisplay& a, const DetectedDisplay& b) {
+                  if (a.is4K != b.is4K) return a.is4K > b.is4K;
+                  return a.physicalArea > b.physicalArea;
+              });
+    candidates.resize(2);
+
+    std::vector<CGDisplayModeRef> inputModes;
+    inputModes.reserve(candidates.size());
+    for (const auto& display : candidates) {
+        const CGDisplayModeRef mode = copyIcuixianInputMode(display.id);
+        if (!mode) {
+            for (const auto retainedMode : inputModes) CFRelease(retainedMode);
+            outputModeError_ =
+                "ICUIXIAN 1920x1080 @ 60 Hz mode is unavailable on an input";
+            return false;
+        }
+        inputModes.push_back(mode);
+    }
+
+    CGDisplayConfigRef displayConfig = nullptr;
+    CGError modeResult = CGBeginDisplayConfiguration(&displayConfig);
+    for (std::size_t i = 0;
+         modeResult == kCGErrorSuccess && i < candidates.size(); ++i) {
+        modeResult = CGConfigureDisplayWithDisplayMode(
+            displayConfig, candidates[i].id, inputModes[i], nullptr);
+    }
+    if (modeResult == kCGErrorSuccess) {
+        modeResult = CGCompleteDisplayConfiguration(
+            displayConfig, kCGConfigurePermanently);
+    } else if (displayConfig) {
+        CGCancelDisplayConfiguration(displayConfig);
+    }
+    for (const auto mode : inputModes) CFRelease(mode);
+
+    if (modeResult != kCGErrorSuccess) {
+        outputModeError_ =
+            "macOS could not switch both ICUIXIAN inputs to 1080p60";
+        return false;
+    }
+
+    for (auto& display : candidates) {
+        display.bounds = CGDisplayBounds(display.id);
+        if (static_cast<int>(display.bounds.size.width) !=
+                static_cast<int>(kIcuixianInputWidth) ||
+            static_cast<int>(display.bounds.size.height) !=
+                static_cast<int>(kIcuixianInputHeight)) {
+            outputModeError_ =
+                "ICUIXIAN input is not exposed as a 1920x1080 desktop";
+            return false;
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const DetectedDisplay& a, const DetectedDisplay& b) {
+                  if (a.bounds.origin.x != b.bounds.origin.x)
+                      return a.bounds.origin.x < b.bounds.origin.x;
+                  return a.bounds.origin.y < b.bounds.origin.y;
+              });
+
+    std::string settingsError;
+    ofJson cfg = SettingsStore::load(&settingsError);
+    if (!cfg.is_object()) {
+        outputModeError_ = settingsError.empty()
+            ? "settings.json is missing or invalid" : settingsError;
+        return false;
+    }
+
+    ofJson windows = ofJson::array();
+    for (const auto& display : candidates) {
+        windows.push_back({
+            {"x", static_cast<int>(display.bounds.origin.x)},
+            {"y", static_cast<int>(display.bounds.origin.y)},
+            {"width", static_cast<int>(display.bounds.size.width)},
+            {"height", static_cast<int>(display.bounds.size.height)}
+        });
+    }
+    cfg["outputMode"] = "dualWindow8";
+    cfg["presentationWindows"] = windows;
+    cfg["videoWallController"] = {
+        {"brand", "ICUIXIAN"},
+        {"model", "0104-XZ"},
+        {"asin", "B0DM98NVSH"},
+        {"controllers", 2},
+        {"layoutPerController", "4x1"},
+        {"rotationDegrees", 90},
+        {"inputWidth", kIcuixianInputWidth},
+        {"inputHeight", kIcuixianInputHeight},
+        {"refreshHz", kIcuixianRefreshHz}
+    };
+
+    if (!SettingsStore::save(cfg, &settingsError)) {
+        outputModeError_ = settingsError.empty()
+            ? "Could not write settings.json" : settingsError;
+        return false;
+    }
+
+    const auto& a = candidates[0].bounds;
+    const auto& b = candidates[1].bounds;
+    detectedOutputSummary_ =
+        "ICUIXIAN 0104-XZ: A " +
+        ofToString(static_cast<int>(a.size.width)) + "x" +
+        ofToString(static_cast<int>(a.size.height)) + " @ " +
+        ofToString(static_cast<int>(a.origin.x)) + "," +
+        ofToString(static_cast<int>(a.origin.y)) + " | B " +
+        ofToString(static_cast<int>(b.size.width)) + "x" +
+        ofToString(static_cast<int>(b.size.height)) + " @ " +
+        ofToString(static_cast<int>(b.origin.x)) + "," +
+        ofToString(static_cast<int>(b.origin.y));
+    outputModeError_.clear();
+    dualWindowConfigured_ = true;
+    outputRestartRequired_ = true;
+    return true;
+}
+
 void ControlApp::drawGlobalPanel() {
-    ImGui::BeginChild("GlobalBar", ImVec2(0.f, 72.f), true,
+    ImGui::BeginChild("GlobalBar", ImVec2(0.f, 92.f), true,
                       ImGuiWindowFlags_NoScrollbar);
     ImGui::Text("PDJ CONTROL");
     ImGui::SameLine(120.f);
@@ -176,8 +427,33 @@ void ControlApp::drawGlobalPanel() {
     ImGui::TextDisabled("|  CLIPS");
     ImGui::SameLine();
     ImGui::Text("%d available", pool_->totalClips());
+    ImGui::SameLine();
+    if (dualWindowConfigured_) {
+        ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.55f, 1.f),
+                           "Dual output configured");
+    } else if (ImGui::Button("Enable dual output")) {
+        if (saveOutputMode("dualWindow8")) {
+            dualWindowConfigured_ = true;
+            outputRestartRequired_ = true;
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Configure ICUIXIAN outputs"))
+        detectAndSaveDualOutputs();
+    if (outputRestartRequired_) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.f, 0.68f, 0.25f, 1.f),
+                           "Restart required");
+    } else if (!outputModeError_.empty()) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.f, 0.35f, 0.35f, 1.f),
+                           "%s", outputModeError_.c_str());
+    }
     ImGui::SameLine(ImGui::GetWindowWidth() - 108.f);
     ImGui::TextDisabled("U: hide UI");
+    if (!detectedOutputSummary_.empty()) {
+        ImGui::TextDisabled("%s", detectedOutputSummary_.c_str());
+    }
     ImGui::EndChild();
 }
 
@@ -190,17 +466,22 @@ void ControlApp::drawOverview() {
     const int channelCount = static_cast<int>(channels_.size());
     const float gap = ImGui::GetStyle().ItemSpacing.x;
     const ImVec2 available = ImGui::GetContentRegionAvail();
+    const int columnsPerRow = std::max(1, std::min(4, channelCount));
+    const int rowCount = std::max(1, (channelCount + columnsPerRow - 1) /
+                                      columnsPerRow);
     const float cardWidth =
-        (available.x - gap * std::max(0, channelCount - 1)) /
-        std::max(1, channelCount);
+        (available.x - gap * std::max(0, columnsPerRow - 1)) /
+        columnsPerRow;
+    const float cardHeight =
+        (available.y - gap * std::max(0, rowCount - 1)) / rowCount;
 
     for (int i = 0; i < channelCount; i++) {
         Channel* ch = channels_[i];
         if (!ch) continue;
-        if (i > 0) ImGui::SameLine();
+        if ((i % columnsPerRow) != 0) ImGui::SameLine();
 
         ImGui::PushID(i);
-        ImGui::BeginChild("OverviewCard", ImVec2(cardWidth, available.y), true);
+        ImGui::BeginChild("OverviewCard", ImVec2(cardWidth, cardHeight), true);
 
         ImGui::Text("CHANNEL %d", i);
         ImGui::SameLine();
@@ -245,6 +526,7 @@ void ControlApp::drawOverview() {
         ImGui::Text("Flow angle: %.2f", data.flowAngle);
         ImGui::Text("Blobs: %d", data.blobCount);
         ImGui::Text("Contour: %.0f", data.contourLength);
+        ImGui::Text("Update: %.2f ms", ch->getUpdateMilliseconds());
 
         ImGui::EndChild();
         ImGui::PopID();
@@ -408,6 +690,218 @@ void ControlApp::drawVideoDirectorPanel() {
     ImGui::EndChild();
 }
 
+void ControlApp::drawComposerPanel() {
+    if (!composer_) return;
+    VisualComposerParams& p = composer_->params();
+    static int selectedGenerator = 0;
+    static int selectedOrganization = 0;
+    static const char* generatorNames[] = {
+        "RasterPulse", "BitMatrix", "ModularGrid", "PhaseLines",
+        "VectorField", "DataLedger", "SignalTrace", "ThresholdBridge"
+    };
+    static const char* organizationNames[] = {
+        "Unison", "Propagation", "Counterpoint", "4 + 4"
+    };
+    static const char* contentNames[] = {
+        "Video", "Generator", "Breath", "Transition"
+    };
+    static const char* stageNames[] = {
+        "Appearance", "Development", "Threshold",
+        "Transformation", "Dissolution"
+    };
+
+    ImGui::BeginChild("ComposerPanel", ImVec2(0.f, 0.f), true);
+    ImGui::Text("VISUAL COMPOSER");
+    ImGui::SameLine(190.f);
+    ImGui::TextColored(p.enabled ? ImVec4(0.35f, 0.85f, 0.55f, 1.f)
+                                 : ImVec4(0.75f, 0.75f, 0.75f, 1.f),
+                       "%s", p.enabled ? "ACTIVE" : "LEGACY VIDEO MODE");
+    ImGui::Checkbox("Enabled", &p.enabled);
+
+    ImGui::SetNextItemWidth(190.f);
+    ImGui::Combo("Organization", &selectedOrganization,
+                 "Unison\0Propagation\0Counterpoint\0" "4 + 4\0");
+    ImGui::SameLine();
+    if (ImGui::Button("Apply organization"))
+        composer_->forceOrganization(
+            static_cast<OrganizationMode>(selectedOrganization));
+
+    ImGui::SetNextItemWidth(190.f);
+    ImGui::Combo("Generator", &selectedGenerator,
+                 "RasterPulse\0BitMatrix\0ModularGrid\0PhaseLines\0"
+                 "VectorField\0DataLedger\0SignalTrace\0ThresholdBridge\0");
+    ImGui::SameLine();
+    if (ImGui::Button("Shared generator"))
+        composer_->forceShared(ContentType::Generator, selectedGenerator);
+    ImGui::SameLine();
+    if (ImGui::Button("Shared breath"))
+        composer_->forceShared(ContentType::Breath);
+
+    ImGui::Separator();
+    ImGui::Columns(3, "ComposerColumns", false);
+    ImGui::TextDisabled("CONTENT WEIGHTS");
+    compactSliderFloat("Video", "##ComposerVideoW", &p.videoProbability, 0.f, 1.f);
+    compactSliderFloat("Generator", "##ComposerGenW", &p.generatorProbability, 0.f, 1.f);
+    compactSliderFloat("Breath", "##ComposerBreathW", &p.breathProbability, 0.f, 1.f);
+    compactSliderFloat("Transition", "##ComposerTransW", &p.transitionProbability, 0.f, 1.f);
+
+    ImGui::NextColumn();
+    ImGui::TextDisabled("PROTECTED DURATIONS");
+    compactSliderFloat("Video min", "##ComposerVideoMin", &p.videoMinDuration, 1.f, 120.f, "%.0f s");
+    compactSliderFloat("Generator min", "##ComposerGenMin", &p.generatorMinDuration, 2.f, 60.f, "%.0f s");
+    compactSliderFloat("Generator max", "##ComposerGenMax", &p.generatorMaxDuration, 3.f, 120.f, "%.0f s");
+    compactSliderFloat("Breath min", "##ComposerBreathMin", &p.breathMinDuration, 0.5f, 20.f, "%.1f s");
+    compactSliderFloat("Breath max", "##ComposerBreathMax", &p.breathMaxDuration, 1.f, 30.f, "%.1f s");
+
+    ImGui::NextColumn();
+    ImGui::TextDisabled("RHYTHM / IMAGE");
+    compactSliderFloat("BPM", "##ComposerBpm", &p.bpm, 20.f, 240.f, "%.1f");
+    compactSliderInt("Subdivision", "##ComposerSub", &p.beatSubdivision, 1, 16);
+    for (Channel* channel : channels_) {
+        if (!channel) continue;
+        compactSliderFloat("Intensity", ("##GenIntensity" + ofToString(channel->getIdx())).c_str(),
+                           &channel->generatorParams().intensity, 0.f, 1.f);
+        compactSliderFloat("Density", ("##GenDensity" + ofToString(channel->getIdx())).c_str(),
+                           &channel->generatorParams().density, 0.f, 1.f);
+        break;
+    }
+    if (!channels_.empty() && channels_[0]) {
+        const GeneratorRuntimeParams source = channels_[0]->generatorParams();
+        for (std::size_t i = 1; i < channels_.size(); ++i) {
+            if (!channels_[i]) continue;
+            channels_[i]->generatorParams().intensity = source.intensity;
+            channels_[i]->generatorParams().density = source.density;
+        }
+    }
+    ImGui::Columns(1);
+
+    sectionTitle("CHANNEL CHAPTERS");
+    for (int i = 0; i < composer_->channelCount(); ++i) {
+        const ChapterState& state = composer_->stateFor(i);
+        const int content = ofClamp(static_cast<int>(state.content), 0, 3);
+        const int stage = ofClamp(static_cast<int>(state.stage), 0, 4);
+        const int organization =
+            ofClamp(static_cast<int>(state.organization), 0, 3);
+        const int generator = ofClamp(state.generator, 0, 7);
+        ImGui::Text("CH %d  %s  %s  %s  %.0f%%",
+                    i, contentNames[content],
+                    content == static_cast<int>(ContentType::Video)
+                        ? "-"
+                        : generatorNames[generator],
+                    stageNames[stage], state.stageProgress * 100.f);
+        ImGui::SameLine(570.f);
+        ImGui::TextDisabled("%s  beat %llu  rev %llu",
+                            organizationNames[organization],
+                            static_cast<unsigned long long>(state.beatIndex),
+                            static_cast<unsigned long long>(state.revision));
+    }
+    ImGui::EndChild();
+}
+
+void ControlApp::drawPerformancePanel() {
+    ImGui::Spacing();
+    ImGui::Text("PERFORMANCE TEST");
+    ImGui::TextDisabled(
+        "Production frame pacing, subsystem cost, CPU and memory");
+    ImGui::Spacing();
+
+    const bool running = performance_->isRunning();
+    if (!running) {
+        const float minutes = performance_->config().durationSeconds / 60.f;
+        const std::string startLabel =
+            "Start " + ofToString(minutes, minutes < 1.f ? 1 : 0) +
+            "-minute stress test";
+        if (ImGui::Button(startLabel.c_str(), ImVec2(240.f, 34.f)))
+            performance_->start(channels_, composer_);
+    } else {
+        if (ImGui::Button("Stop test", ImVec2(140.f, 34.f)))
+            performance_->stop(channels_, composer_, false);
+    }
+    ImGui::SameLine();
+    if (!running) {
+        if (ImGui::Button("Reset results", ImVec2(140.f, 34.f)))
+            performance_->reset();
+    } else {
+        ImGui::TextDisabled("Reset disabled while test is running");
+    }
+    ImGui::SameLine();
+    if (performance_->hasResults() && ImGui::Button("Export report"))
+        performance_->exportReport();
+
+    const float elapsed = performance_->elapsedSeconds();
+    const float duration = performance_->config().durationSeconds;
+    ImGui::ProgressBar(performance_->progress(), ImVec2(-1.f, 20.f));
+    ImGui::Text("Elapsed %.1f / %.1f s", elapsed, duration);
+    ImGui::SameLine();
+    ImGui::TextDisabled("Phase: %s",
+                        performance_->currentPhaseName().c_str());
+
+    ImGui::Separator();
+    ImGui::Text("Process CPU: %.1f%%", performance_->cpuPercent());
+    ImGui::SameLine(240.f);
+    ImGui::Text("Memory: %.1f MB", performance_->residentMemoryMB());
+    ImGui::SameLine(440.f);
+    ImGui::Text("Growth: %+.1f MB", performance_->memoryGrowthMB());
+    ImGui::Text("Slowest measured subsystem: %s",
+                performance_->slowestSubsystem().c_str());
+    ImGui::Text("Slowest channel: %s",
+                performance_->slowestChannel().c_str());
+    ImGui::SameLine(430.f);
+    ImGui::Text("Slowest visual mode: %s",
+                performance_->slowestVisualMode().c_str());
+
+    ImGui::Spacing();
+    ImGui::Text("PRESENTATION WINDOWS");
+    for (int i = 0; i < PerformanceMonitor::kMaxWindows; ++i) {
+        const auto& summary = performance_->windowSummary(i);
+        if (summary.fps <= 0.f && summary.sampleCount == 0) continue;
+        ImGui::PushID(1000 + i);
+        ImGui::BeginChild("WindowPerf", ImVec2(0.f, 76.f), true);
+        ImGui::Text("Window %d", i);
+        ImGui::SameLine(110.f);
+        ImGui::Text("FPS %.2f", summary.fps);
+        ImGui::SameLine(220.f);
+        ImGui::Text("Frame avg %.2f ms", summary.averageFrameMs);
+        ImGui::SameLine(410.f);
+        ImGui::Text("p95 %.2f / p99 %.2f ms",
+                    summary.p95FrameMs, summary.p99FrameMs);
+        ImGui::Text("Update %.2f ms  Draw %.2f ms  GPU %.2f ms",
+                    summary.updateMs, summary.drawMs, summary.gpuMs);
+        ImGui::SameLine(430.f);
+        ImGui::Text("Late %llu  Stalls %llu",
+                    static_cast<unsigned long long>(summary.lateFrames),
+                    static_cast<unsigned long long>(summary.stalls));
+        ImGui::EndChild();
+        ImGui::PopID();
+    }
+
+    ImGui::Spacing();
+    ImGui::Text("CHANNEL COSTS");
+    for (int i = 0; i < static_cast<int>(channels_.size()); ++i) {
+        const auto& sample = performance_->channelLatest(i);
+        ImGui::Text(
+            "CH%d total %5.2f | decode %5.2f | render %5.2f | read %5.2f | "
+            "CV %5.2f | score %5.2f | OSC %5.2f | draw %5.2f ms%s",
+            i, sample.totalMs, sample.decoderMs, sample.videoRenderMs,
+            sample.readbackMs, sample.cvMs, sample.scoreMs, sample.oscMs,
+            sample.drawMs, sample.analyzed ? "  CV frame" : "");
+    }
+
+    if (performance_->hasResults()) {
+        ImGui::Separator();
+        const bool passed = performance_->passed();
+        ImGui::TextColored(
+            passed ? ImVec4(0.35f, 0.85f, 0.55f, 1.f)
+                   : ImVec4(1.f, 0.35f, 0.35f, 1.f),
+            "%s", passed ? "PASS" : "FAIL");
+        for (const auto& reason : performance_->failureReasons())
+            ImGui::BulletText("%s", reason.c_str());
+        if (!performance_->lastReportPath().empty())
+            ImGui::TextWrapped("Report: %s",
+                               performance_->lastReportPath().c_str());
+    }
+}
+
 void ControlApp::drawChannelPanel(int i) {
     Channel* ch = channels_[i];
     if (!ch) return;
@@ -489,13 +983,36 @@ void ControlApp::drawChannelPanel(int i) {
     compactSliderFloat("Flash", "##FlashDuration", &sp.flashDuration, 0.05f, 1.f);
     compactSliderFloat("Opacity", "##Opacity", &sp.markOpacity, 0.f, 1.f);
 
-    int modeOvr = sp.forcedMode + 1;
+    static const int modeValues[] = {
+        -1,
+        (int)ScoreMode::BwClean,
+        (int)ScoreMode::ScanLine,
+        (int)ScoreMode::BBoxTracker,
+        (int)ScoreMode::BinaryText,
+        (int)ScoreMode::Waveform,
+        (int)ScoreMode::GridData,
+        (int)ScoreMode::Barcode,
+        (int)ScoreMode::VideoNormal,
+        (int)ScoreMode::VideoSquares,
+        (int)ScoreMode::VideoNumbers,
+        (int)ScoreMode::VideoLines,
+        (int)ScoreMode::ThermalVision,
+        (int)ScoreMode::Flash,
+    };
+    static constexpr int modeValueCount = sizeof(modeValues) / sizeof(modeValues[0]);
     static const char* modeItems =
         "Auto\0BwClean\0ScanLine\0BBoxTracker\0BinaryText\0Waveform\0GridData\0Barcode\0"
-        "VideoNormal\0VideoSquares\0VideoNumbers\0VideoLines\0ThermalVision\0SlitScan\0Flash\0";
+        "VideoNormal\0VideoSquares\0VideoNumbers\0VideoLines\0ThermalVision\0Flash\0";
+    int modeOvr = 0;
+    for (int i = 0; i < modeValueCount; i++) {
+        if (modeValues[i] == sp.forcedMode) {
+            modeOvr = i;
+            break;
+        }
+    }
     ImGui::SetNextItemWidth(-1.f);
     if (ImGui::Combo("##Mode", &modeOvr, modeItems))
-        sp.forcedMode = modeOvr - 1;
+        sp.forcedMode = modeValues[modeOvr];
 
     int curMode = (int)ch->getScore().currentMode();
     ImGui::Text("Active: %s", kModeNames[std::min(curMode, (int)ScoreMode::Flash + 1)]);
@@ -507,7 +1024,6 @@ void ControlApp::drawChannelPanel(int i) {
 
     compactSliderFloat("Square", "##SquareSize", &sp.videoSquareSize, 60.f, 400.f, "%.0f");
     compactSliderInt("Sq count", "##SquareCount", &sp.videoSquareCount, 1, 12);
-    compactSliderInt("Slit W", "##SlitWidth", &sp.slitStripW, 1, 12);
 
     sectionTitle("LIVE CV DATA");
     ImGui::Text("Flow %.3f  Angle %.2f", d.flowMagnitude, d.flowAngle);

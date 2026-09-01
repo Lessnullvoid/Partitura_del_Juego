@@ -18,6 +18,7 @@ void OSCSender::send(const CVData& d) {
     ofxOscBundle coreBundle;
     ofxOscBundle blobBundle;
     ofxOscBundle contextBundle;
+    ofxOscBundle generatorBundle;
 
     auto addFloat = [](ofxOscBundle& target, const std::string& addr, float v) {
         ofxOscMessage m;
@@ -93,9 +94,24 @@ void OSCSender::send(const CVData& d) {
     addFloat (contextBundle, base + "/director/speed",     d.speedMultiplier);
     addInt   (contextBundle, base + "/director/clear",     d.clearPhase);
     addFloat (contextBundle, base + "/director/clear_alpha", d.clearAlpha);
+    addInt   (generatorBundle, base + "/generator/active",       d.generatorActive);
+    addInt   (generatorBundle, base + "/generator/mode",         d.generatorMode);
+    addInt   (generatorBundle, base + "/generator/revision",     d.generatorRevision);
+    addInt   (generatorBundle, base + "/generator/organization", d.organizationMode);
+    addInt   (generatorBundle, base + "/generator/role",         d.screenRole);
+    addInt   (generatorBundle, base + "/generator/stage",        d.generatorStage);
+    addFloat (generatorBundle, base + "/generator/stage_progress",
+              d.generatorStageProgress);
+    addFloat (generatorBundle, base + "/generator/beat_phase",   d.generatorBeatPhase);
+    addInt   (generatorBundle, base + "/generator/beat_index",   d.generatorBeatIndex);
+    addFloat (generatorBundle, base + "/generator/subdivision",  d.generatorSubdivisionPulse);
+    addFloat (generatorBundle, base + "/generator/envelope",     d.generatorEnvelope);
+    addInt   (generatorBundle, base + "/generator/seed",         d.generatorSeed);
+    addInt   (generatorBundle, base + "/generator/transition",   d.transitionActive);
 
-    // Three small packets avoid IP fragmentation on a typical Ethernet LAN.
+    // Four small packets avoid IP fragmentation on a typical Ethernet LAN.
     sender_.sendBundle(coreBundle);
     sender_.sendBundle(blobBundle);
     sender_.sendBundle(contextBundle);
+    sender_.sendBundle(generatorBundle);
 }

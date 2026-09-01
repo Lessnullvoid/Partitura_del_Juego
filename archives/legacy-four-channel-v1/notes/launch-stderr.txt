@@ -1,0 +1,4 @@
+2026-09-01 02:38:45.708 pdj-legacy-four-channel-v1[71468:8180086] video file loaded at 1080 x 1920 @ 23.976023 fps
+2026-09-01 02:38:45.761 pdj-legacy-four-channel-v1[71468:8180100] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:38:45.818 pdj-legacy-four-channel-v1[71468:8180109] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:38:45.844 pdj-legacy-four-channel-v1[71468:8180227] video file loaded at 1080 x 1920 @ 23.976025 fps

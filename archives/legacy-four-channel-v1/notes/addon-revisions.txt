@@ -1,0 +1,10 @@
+openFrameworks: 0.12.0 osx release
+OF_ROOT: /Users/microhm/Documents/of_v0.12.0_osx_release
+ofxOpenCv: bundled with OF 0.12.0
+ofxCv: bundled, MIT (Kyle McDonald)
+ofxOsc: bundled with OF 0.12.0
+ofxImGui: bundled (jvcleave/ofxImGui master, older ImGui embed)
+architecture: arm64
+macos: 26.5.2 (25F84)
+xcode: 26.6 (17F113)
+clang: Apple clang 21.0.0
