@@ -8,14 +8,16 @@ float randomRange(float a, float b) {
 }
 }
 
-void VideoDirector::setup(ClipPool* pool, const VideoDirectorParams& params) {
+void VideoDirector::setup(ClipPool* pool, const VideoDirectorParams& params,
+                          int channelCount) {
     pool_ = pool;
     params_ = params;
+    channelCount_ = ofClamp(channelCount, 1, kChannelCount);
     wasEnabled_ = params_.enabled;
     lastUpdateAt_ = -1.f;
     nextSharedAt_ = 0.f;
 
-    for (int i = 0; i < kChannelCount; ++i) {
+    for (int i = 0; i < channelCount_; ++i) {
         waitingForPlan_[i] = true;
         if (params_.enabled) scheduleIndependent(i);
     }
@@ -36,7 +38,7 @@ void VideoDirector::update(float globalSpeed) {
     lastUpdateAt_ = now;
 
     if (params_.enabled && !wasEnabled_) {
-        for (int i = 0; i < kChannelCount; ++i) {
+        for (int i = 0; i < channelCount_; ++i) {
             if (waitingForPlan_[i]) scheduleIndependent(i);
         }
         scheduleNextShared(now);
@@ -172,7 +174,7 @@ void VideoDirector::beginShared(float now) {
 
     VideoPlan common = makePlan(path, true);
     ready_.fill({});
-    for (int i = 0; i < kChannelCount; ++i) {
+    for (int i = 0; i < channelCount_; ++i) {
         common.revision = ++nextRevision_[i];
         plans_[i] = common;
         waitingForPlan_[i] = false;
@@ -186,12 +188,12 @@ void VideoDirector::beginShared(float now) {
 void VideoDirector::finishShared(float now) {
     sharedState_ = SharedState::Idle;
     scheduleNextShared(now);
-    for (int i = 0; i < kChannelCount; ++i) {
+    for (int i = 0; i < channelCount_; ++i) {
         waitingForPlan_[i] = true;
         if (params_.enabled) scheduleIndependent(i);
     }
 }
 
 bool VideoDirector::validChannel(int channelIdx) const {
-    return channelIdx >= 0 && channelIdx < kChannelCount;
+    return channelIdx >= 0 && channelIdx < channelCount_;
 }

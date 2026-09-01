@@ -5,14 +5,18 @@
 #include "OSCSender.h"
 #include "GlobalDirector.h"
 #include "VideoDirector.h"
+#include "PerformanceMonitor.h"
 
 class ChannelApp : public ofBaseApp {
 public:
     ChannelApp(Channel* ch, int idx, int w, int h,
                ClipPool* pool, OSCSender* osc, const CVParams& cvp,
-               GlobalDirector* dir = nullptr, VideoDirector* videoDir = nullptr)
+               GlobalDirector* dir = nullptr, VideoDirector* videoDir = nullptr,
+               VisualComposer* composer = nullptr,
+               PerformanceMonitor* performance = nullptr, int targetFps = 30)
         : ch_(ch), idx_(idx), w_(w), h_(h), pool_(pool), osc_(osc), cvp_(cvp),
-          dir_(dir), videoDir_(videoDir) {}
+          dir_(dir), videoDir_(videoDir), composer_(composer),
+          performance_(performance), targetFps_(targetFps) {}
 
     void setup()  override;
     void update() override;
@@ -26,4 +30,7 @@ private:
     CVParams         cvp_;
     GlobalDirector*  dir_;
     VideoDirector*   videoDir_;
+    VisualComposer*  composer_;
+    PerformanceMonitor* performance_;
+    int targetFps_;
 };

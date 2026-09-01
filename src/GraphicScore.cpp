@@ -75,8 +75,6 @@ void GraphicScore::buildSequence() {
         ScoreMode::BwClean,
         ScoreMode::VideoNormal,
         ScoreMode::BwClean,
-        ScoreMode::SlitScan,          // temporal time-scroll #1
-        ScoreMode::BwClean,
         ScoreMode::VideoLines,
         ScoreMode::BwClean,
         ScoreMode::Waveform,
@@ -88,8 +86,6 @@ void GraphicScore::buildSequence() {
         ScoreMode::ThermalVision,
         ScoreMode::BwClean,
         ScoreMode::VideoNumbers,
-        ScoreMode::BwClean,
-        ScoreMode::SlitScan,          // temporal time-scroll #2
         ScoreMode::BwClean,
         ScoreMode::GridData,
         ScoreMode::BwClean,
@@ -114,11 +110,13 @@ void GraphicScore::buildSequence() {
 // ---- Events ------------------------------------------------------------------
 void GraphicScore::onCollision() {
     if (preFlashMode_ >= 0) return;
+    if (director_ == ScoreMode::SlitScan) return;   // keep superposition uninterrupted
     preFlashMode_ = (int)director_;
     flashTimer_   = 0.0;
 }
 
 void GraphicScore::onClipChange() {
+    if (director_ == ScoreMode::SlitScan) return;   // keep superposition uninterrupted
     strobeAlpha_ = 255.f;
     // Alternate between white and red for variety
     strobeColor_ = (ofRandom(1.f) > 0.5f)
@@ -137,6 +135,9 @@ void GraphicScore::advanceDirector(double dt) {
         return;
     }
 
+    if (params_.forcedMode == (int)ScoreMode::SlitScan)
+        params_.forcedMode = -1;
+
     if (params_.forcedMode >= 0 && params_.forcedMode < (int)ScoreMode::COUNT) {
         director_ = (ScoreMode)params_.forcedMode;
         return;
@@ -150,6 +151,23 @@ void GraphicScore::advanceDirector(double dt) {
         modeDuration_ = ofRandom(params_.minModeDuration, params_.maxModeDuration);
         // Cycle mark color on every mode transition
         params_.markColor = nextMarkColor(params_.markColor);
+
+        if (director_ == ScoreMode::SlitScan) {
+            // Guarantee enough time to fill all layers and display the result.
+            // Minimum = time to capture kSlitLayers snapshots + 12 s display buffer.
+            float fillTime = (float)(kSlitLayers * std::max(1, params_.slitInterval)) / 30.0f;
+            modeDuration_ = std::max(modeDuration_, (double)(fillTime + 12.0f));
+            // Reset both buffers so the ribbon + superposition always build from scratch.
+            slitLayersFilled_ = 0;
+            slitLayerWrite_   = 0;
+            slitFrameCount_   = 0;
+            slitReady_        = false;
+            slitGhostMat_     = cv::Mat();
+            if (!slitRibbonMat_.empty()) slitRibbonMat_.setTo(0);
+            slitWriteX_       = 0;
+            slitSrcXNorm_     = 0.5f;
+            slitStepAccum_    = 0.f;
+        }
     }
 }
 
@@ -214,6 +232,24 @@ void GraphicScore::update(const ofTexture& bwTex, const ofTexture& rawTex, CVPip
         if (strobeAlpha_ < 0.f) strobeAlpha_ = 0.f;
     }
 
+    fbo_.end();
+}
+
+void GraphicScore::updateExternal(const ofTexture* texture, float opacity) {
+    const double now = ofGetElapsedTimef();
+    lastTime_ = now;
+    curBwTex_ = nullptr;
+    curRawTex_ = nullptr;
+
+    fbo_.begin();
+    ofClear(0, 0, 0, 255);
+    if (texture && texture->isAllocated()) {
+        ofPushStyle();
+        ofSetColor(255, 255, 255,
+                   static_cast<int>(ofClamp(opacity, 0.f, 1.f) * 255.f));
+        texture->draw(0, 0, static_cast<float>(w_), static_cast<float>(h_));
+        ofPopStyle();
+    }
     fbo_.end();
 }
 
@@ -962,102 +998,144 @@ void GraphicScore::draw(int x, int y, int w, int h) {
 }
 
 // ---- updateSlitFbo -----------------------------------------------------------
-// CPU ring buffer: each frame, store the CENTER COLUMN of grayMat_ at the
-// current write position, then assemble the full display image by unrolling
-// the ring (oldest column on the left, newest on the right).
+// Two layers combined into one cinematic composite:
+//   1. Ribbon  — classic Form+Code slit-scan: every frame, the center column
+//      of the grayscale analysis frame is written into a ring buffer and the
+//      buffer is unrolled left(oldest)->right(newest) with a brightness fade.
+//   2. Ghosts  — stroboscopic superposition: every slitInterval frames, a full
+//      grayscale frame is captured into a circular buffer of kSlitLayers
+//      slots; the ghost layer (recomputed only on capture frames) screen-blends
+//      all filled slots, oldest faintest -> newest brightest.
+// The two layers are screen-blended together every frame so the flowing
+// wave-distortion of the ribbon shows through while frozen full-body
+// silhouettes float on top of it.
 // Runs BEFORE fbo_.begin() — no FBO synchronisation issues possible.
 void GraphicScore::updateSlitFbo(CVPipeline& cv) {
     const cv::Mat& gray = cv.getGrayMat();
     if (gray.empty()) return;
 
-    const int aW = gray.cols;   // e.g. 270
-    const int aH = gray.rows;   // e.g. 480
+    const int aW = gray.cols;
+    const int aH = gray.rows;
 
-    // Lazy init: match actual analysis resolution
-    if (slitMat_.empty() || slitMat_.cols != aW || slitMat_.rows != aH)
-        slitMat_ = cv::Mat::zeros(aH, aW, CV_8UC1);
+    // ---- 1. Ribbon: moving sample slice + motion-driven write speed -----------
+    // Rather than a fixed center column advancing at constant speed (the
+    // "boring, one direction" look), the sampled column follows the live
+    // motion/blob centroid, and the number of columns stamped per frame
+    // varies with motion energy — fast motion compresses more time into
+    // less space (streaking), calm motion stretches a moment across more
+    // space (holds). This keeps the classic Form+Code ribbon structure but
+    // makes both WHAT is sampled and HOW FAST it scrolls reactive.
+    if (slitRibbonMat_.empty() || slitRibbonMat_.cols != aW || slitRibbonMat_.rows != aH)
+        slitRibbonMat_ = cv::Mat::zeros(aH, aW, CV_8UC1);
 
-    // Store this frame's center column into the ring buffer slot
-    const int srcX = aW / 2;
-    for (int y = 0; y < aH; y++)
-        slitMat_.at<uint8_t>(y, slitWriteX_) = gray.at<uint8_t>(y, srcX);
+    const CVData& cvData = cv.getData();
 
-    slitWriteX_ = (slitWriteX_ + 1) % aW;
-
-    // Assemble the display matrix: left = oldest, right = newest.
-    // Apply a mild brightness gradient (50% at left, 100% at right) so the
-    // "past" fades naturally and the time axis reads intuitively.
-    cv::Mat assembled(aH, aW, CV_8UC3);
-    for (int x = 0; x < aW; x++) {
-        int    bufX = (slitWriteX_ + x) % aW;   // oldest first
-        float  fade = 0.45f + 0.55f * ((float)x / float(aW - 1));
-        for (int y = 0; y < aH; y++) {
-            uint8_t v = (uint8_t)(slitMat_.at<uint8_t>(y, bufX) * fade);
-            assembled.at<cv::Vec3b>(y, x) = cv::Vec3b(v, v, v);
+    float targetSrcXNorm = 0.5f;
+    if (!cvData.blobs.empty()) {
+        float sumWX = 0.f, sumW = 0.f;
+        for (const auto& b : cvData.blobs) {
+            float w = std::max(1.f, b.area);
+            sumWX += b.x * w;
+            sumW  += w;
         }
+        if (sumW > 0.f) targetSrcXNorm = sumWX / sumW;
+    }
+    // Smooth toward the target so the slice drifts rather than jitters.
+    slitSrcXNorm_ += (targetSrcXNorm - slitSrcXNorm_) * 0.12f;
+    slitSrcXNorm_ = ofClamp(slitSrcXNorm_, 0.05f, 0.95f);
+    const int srcX = (int)(slitSrcXNorm_ * (float)(aW - 1));
+
+    // Variable write speed: 1..4 columns/frame depending on motion energy,
+    // accumulated fractionally so slow energy still advances smoothly.
+    slitStepAccum_ += 1.0f + ofClamp(cvData.motionEnergy * 6.f, 0.f, 3.f);
+    int steps = (int)slitStepAccum_;
+    slitStepAccum_ -= (float)steps;
+    steps = std::max(1, steps);
+
+    for (int s = 0; s < steps; s++) {
+        for (int y = 0; y < aH; y++)
+            slitRibbonMat_.at<uint8_t>(y, slitWriteX_) = gray.at<uint8_t>(y, srcX);
+        slitWriteX_ = (slitWriteX_ + 1) % aW;
     }
 
-    // Tint with markColor (reuse for slit) — mix grey channel with mark hue
-    ofColor mc = params_.markColor;
-    if (mc.r != 255 || mc.g != 255 || mc.b != 255) {
-        float mr = mc.r / 255.f, mg = mc.g / 255.f, mb = mc.b / 255.f;
-        for (int y = 0; y < aH; y++) {
-            for (int x = 0; x < aW; x++) {
-                auto& px = assembled.at<cv::Vec3b>(y, x);
-                float g = px[0] / 255.f;
-                px[0] = (uint8_t)(g * mb * 255.f);
-                px[1] = (uint8_t)(g * mg * 255.f);
-                px[2] = (uint8_t)(g * mr * 255.f);
+    cv::Mat ribbon(aH, aW, CV_8UC1);
+    for (int x = 0; x < aW; x++) {
+        int   bufX = (slitWriteX_ + x) % aW;                    // oldest first
+        float fade = 0.35f + 0.65f * ((float)x / float(aW - 1));
+        for (int y = 0; y < aH; y++)
+            ribbon.at<uint8_t>(y, x) = (uint8_t)(slitRibbonMat_.at<uint8_t>(y, bufX) * fade);
+    }
+
+    // ---- 2. Ghosts: capture a full frame every slitInterval frames -----------
+    slitFrameCount_++;
+    const int interval = std::max(1, params_.slitInterval);
+    bool captured = false;
+    if (slitFrameCount_ >= interval) {
+        slitFrameCount_ = 0;
+        captured = true;
+        gray.copyTo(slitFrames_[slitLayerWrite_]);
+        slitLayerWrite_ = (slitLayerWrite_ + 1) % kSlitLayers;
+        if (slitLayersFilled_ < kSlitLayers) slitLayersFilled_++;
+    }
+
+    // Recompute the cached ghost layer only when a new snapshot was captured.
+    if (captured || slitGhostMat_.empty()) {
+        cv::Mat ghosts = cv::Mat::zeros(aH, aW, CV_8UC1);
+        for (int i = 0; i < slitLayersFilled_; i++) {
+            // Map ring: i=0 is oldest, i=filled-1 is newest
+            int idx = (slitLayerWrite_ - slitLayersFilled_ + i + kSlitLayers) % kSlitLayers;
+            float t = (float)(i + 1) / (float)slitLayersFilled_;   // 0..1, newest = 1
+            float w = 0.25f + 0.65f * t;                             // weight: 0.25 -> 0.9
+
+            const cv::Mat& src = slitFrames_[idx];
+            for (int y = 0; y < aH; y++) {
+                for (int x = 0; x < aW; x++) {
+                    float sv = src.at<uint8_t>(y, x) * w / 255.f;   // 0..1 weighted
+                    float ov = ghosts.at<uint8_t>(y, x) / 255.f;    // current out 0..1
+                    float result = 1.f - (1.f - ov) * (1.f - sv);   // screen blend
+                    ghosts.at<uint8_t>(y, x) = (uint8_t)(result * 255.f);
+                }
             }
         }
+        slitGhostMat_ = ghosts;
     }
 
-    slitImage_.setFromPixels(assembled.data, aW, aH, OF_IMAGE_COLOR);
+    // ---- 3. Combine ribbon + ghosts via screen blend, every frame ------------
+    cv::Mat combined(aH, aW, CV_8UC1);
+    for (int y = 0; y < aH; y++) {
+        for (int x = 0; x < aW; x++) {
+            float rv = ribbon.at<uint8_t>(y, x) / 255.f;
+            float gv = slitGhostMat_.at<uint8_t>(y, x) / 255.f;
+            combined.at<uint8_t>(y, x) = (uint8_t)((1.f - (1.f - rv) * (1.f - gv)) * 255.f);
+        }
+    }
+
+    // Keep the composite strictly grayscale — no markColor tint, so the
+    // superposition stays readable regardless of the mode-cycling mark color.
+    cv::Mat assembled3;
+    cv::cvtColor(combined, assembled3, cv::COLOR_GRAY2RGB);
+
+    slitImage_.setFromPixels(assembled3.data, aW, aH, OF_IMAGE_COLOR);
     slitReady_ = true;
 }
 
 // ---- renderSlitScan ----------------------------------------------------------
-// Draws the assembled slit-scan texture and overlays a time axis.
+// Draws the composited superposition texture and a minimal label overlay.
 void GraphicScore::renderSlitScan() {
     ofPushStyle();
 
     if (slitReady_) {
         ofSetColor(255);
-        // Draw stretched to full score FBO — bilinear upscale softens the columns
         slitImage_.draw(0, 0, (float)w_, (float)h_);
     }
 
-    const ofColor& c = params_.markColor;
-
-    // Right-edge "present" marker
+    // Fixed white overlay (not markColor) — keeps the mode monochrome so the
+    // red/blue mark-color cycle never tints the superposition.
     ofSetLineWidth(1.5f);
-    ofSetColor(c.r, c.g, c.b, 200);
+    ofSetColor(255, 255, 255, 200);
     ofDrawLine((float)(w_ - 1), 0, (float)(w_ - 1), (float)h_);
 
-    // Time-axis tick marks along the bottom
-    // kSlitW columns ÷ display width → each output pixel = display_w / kSlitW frames
-    float framesPerPx = (float)kSlitW / (float)w_;   // frames per display pixel
-    float pixPerSec   = 30.f / framesPerPx;           // display pixels per second
-    float labelY      = (float)h_ - 6.f;
-
-    ofSetColor(c.r, c.g, c.b, 80);
-    for (float t = 1.f; t * pixPerSec <= (float)w_; t += 1.f) {
-        float markX = (float)w_ - t * pixPerSec;
-        ofSetLineWidth(1.f);
-        ofDrawLine(markX, (float)h_, markX, (float)h_ - 8.f);
-        ofSetColor(c.r, c.g, c.b, 120);
-        if (monoFont_.isLoaded())
-            monoFont_.drawString("-" + ofToString((int)t) + "s", markX + 3.f, labelY);
-        else
-            ofDrawBitmapString("-" + ofToString((int)t) + "s", (int)markX + 3, (int)h_ - 8);
-        ofSetColor(c.r, c.g, c.b, 80);
-    }
-
-    ofSetColor(c.r, c.g, c.b, 180);
-    if (monoFont_.isLoaded()) monoFont_.drawString("NOW",    (float)(w_ - 30), labelY);
-    else                      ofDrawBitmapString("NOW",     w_ - 30, (int)h_ - 8);
-
-    ofSetColor(c.r, c.g, c.b, 100);
+    ofSetColor(255, 255, 255, 100);
     if (monoFont_.isLoaded()) monoFont_.drawString("SLIT-SCAN", 8.f, 16.f);
     else                      ofDrawBitmapString("SLIT-SCAN", 8, 12);
 

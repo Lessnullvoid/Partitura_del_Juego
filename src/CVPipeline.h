@@ -8,6 +8,7 @@
 struct CVParams {
     bool  enabled        = true;
     bool  halfRes        = true;
+    int   analysisEveryNFrames = 1;
     int   flowWindowSize = 8;
     float blobMinArea    = 500.f;
     float blobMaxArea    = 200000.f;

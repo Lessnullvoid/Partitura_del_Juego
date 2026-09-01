@@ -40,6 +40,21 @@ struct CVData {
     float       speedMultiplier = 1.f;
     int         clearPhase = 0;
     float       clearAlpha = 0.f;
+
+    // Procedural visual composer. Defaults preserve the legacy video-only stream.
+    int         generatorActive = 0;
+    int         generatorMode = -1;
+    int         generatorRevision = 0;
+    int         organizationMode = 0;
+    int         screenRole = 0;
+    int         generatorStage = 0;
+    float       generatorStageProgress = 0.f;
+    float       generatorBeatPhase = 0.f;
+    int         generatorBeatIndex = 0;
+    float       generatorSubdivisionPulse = 0.f;
+    float       generatorEnvelope = 0.f;
+    int         generatorSeed = 0;
+    int         transitionActive = 0;
 };
 
 class OSCSender {

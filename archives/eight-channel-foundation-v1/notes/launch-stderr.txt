@@ -1,0 +1,10 @@
+2026-09-01 02:41:05.867 Partitura_del_Juego[73501:8188349] video file loaded at 1080 x 1920 @ 23.976023 fps
+2026-09-01 02:41:05.894 Partitura_del_Juego[73501:8188349] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:41:05.917 Partitura_del_Juego[73501:8188338] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:41:05.929 Partitura_del_Juego[73501:8188338] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:41:05.983 Partitura_del_Juego[73501:8188401] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:41:05.993 Partitura_del_Juego[73501:8188402] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:41:06.006 Partitura_del_Juego[73501:8188337] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:41:06.017 Partitura_del_Juego[73501:8188402] video file loaded at 1080 x 1920 @ 23.976025 fps
+2026-09-01 02:41:11.413 Partitura_del_Juego[73501:8188349] video file loaded at 1080 x 1920 @ 23.976023 fps
+2026-09-01 02:41:13.777 Partitura_del_Juego[73501:8188349] video file loaded at 1080 x 1920 @ 23.976025 fps

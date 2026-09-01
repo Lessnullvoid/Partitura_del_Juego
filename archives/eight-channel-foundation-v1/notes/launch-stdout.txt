@@ -1,0 +1,60 @@
+[notice ] ClipPool: Found: 001-2.mp4
+[notice ] ClipPool: Found: 001.mp4
+[notice ] ClipPool: Found: 002.mp4
+[notice ] ClipPool: Found: 003-2.mp4
+[notice ] ClipPool: Found: 003.mp4
+[notice ] ClipPool: Found: 004-2.mp4
+[notice ] ClipPool: Found: 004.mp4
+[notice ] ClipPool: Found: 005-2.mp4
+[notice ] ClipPool: Found: 005.mp4
+[notice ] ClipPool: Found: 006 copy.mp4
+[notice ] ClipPool: Found: 006.mp4
+[notice ] ClipPool: Found: 007 copy.mp4
+[notice ] ClipPool: Found: 007.mp4
+[notice ] ClipPool: Found: 008 copy.mp4
+[notice ] ClipPool: Found: 008.mp4
+[notice ] ClipPool: Found: F_001.mp4
+[notice ] ClipPool: Found: F_002.mp4
+[notice ] ClipPool: Found: F_003.mp4
+[notice ] ClipPool: Found: F_004.mp4
+[notice ] ClipPool: Found: F_005.mp4
+[notice ] ClipPool: Found: F_006.mp4
+[notice ] ClipPool: Found: F_007.mp4
+[notice ] ClipPool: Found: F_008.mp4
+[notice ] ClipPool: Found: NEW_001.mp4
+[notice ] ClipPool: Found: NEW_002.mp4
+[notice ] ClipPool: Found: NEW_003.mp4
+[notice ] ClipPool: Found: NEW_004.mp4
+[notice ] ClipPool: Found: NEW_005.mp4
+[notice ] ClipPool: Found: NEW_006.mp4
+[notice ] ClipPool: Found: NEW_007.mp4
+[notice ] ClipPool: Found: NEW_008.mp4
+[notice ] ClipPool: Found: NEW_009.mp4
+[notice ] ClipPool: Found: NEW_010.mp4
+[notice ] ClipPool: Found: NEW_011.mp4
+[notice ] ClipPool: Found: NEW_012.mp4
+[notice ] ClipPool: Found: NEW_013.mp4
+[notice ] ClipPool: Found: NEW_014_flags.mp4
+[notice ] ClipPool: Found: NEW_F_015.mp4
+[notice ] ClipPool: Found: NEW_F_016.mp4
+[notice ] ClipPool: Found: NEW_F_017.mp4
+[notice ] ClipPool: Found: NEW_F_018.mp4
+[notice ] ClipPool: Found: NEW_F_019.mp4
+[notice ] ClipPool: Found: NEW_F_020.mp4
+[notice ] ClipPool: Found: NEW_F_021.mp4
+[notice ] ClipPool: Found: NEW_F_022.mp4
+[notice ] ClipPool: Found: NEW_F_023.mp4
+[notice ] ClipPool: Found: NEW_F_024.mp4
+[notice ] ClipPool: Found: NEW_F_025.mp4
+[notice ] ClipPool: Total clips: 48
+[notice ] OSCSender: Sending to localhost:9001
+[notice ] Channel: [0] Short: 001-2.mp4
+[notice ] Channel: [1] Short: NEW_004.mp4
+[notice ] Channel: [2] Full: NEW_011.mp4
+[notice ] Channel: [3] Full: NEW_002.mp4
+[notice ] Channel: [4] Long: 003-2.mp4
+[notice ] Channel: [5] Short: F_004.mp4
+[notice ] Channel: [6] Full: NEW_007.mp4
+[notice ] Channel: [7] Short: NEW_003.mp4
+[notice ] Channel: [4] Short: NEW_001.mp4
+[notice ] Channel: [6] Full: NEW_F_020.mp4

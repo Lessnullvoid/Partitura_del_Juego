@@ -12,7 +12,10 @@ bool contains(const std::deque<std::string>& history, const std::string& path) {
 
 void ClipPool::scan(const std::string& folder) {
     clips_.clear();
-    ofDirectory dir(folder);
+    // Resolve relative clip folders from the openFrameworks data directory.
+    // This works both in development (bin/data) and in a packaged app
+    // (Contents/Resources/data), regardless of the process working directory.
+    ofDirectory dir(ofToDataPath(folder, true));
     dir.allowExt("mp4");
     dir.allowExt("mov");
     dir.allowExt("avi");

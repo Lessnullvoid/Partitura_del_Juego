@@ -1,8 +1,8 @@
 # Partitura del Juego
 
-Instalación audiovisual generativa construida con openFrameworks (C++) y SuperCollider. La pieza procesa material de vídeo deportivo pregrabado a través de un pipeline de visión artificial en tiempo real y convierte los datos extraídos en una partitura gráfica en evolución continua, distribuida entre ocho pantallas verticales en modo retrato repartidas en dos ordenadores conectados en red. El sonido se sintetiza en vivo en SuperCollider, alimentado por el flujo CV combinado de ambas máquinas vía OSC.
+Instalación audiovisual generativa construida con openFrameworks (C++) y SuperCollider. La pieza procesa vídeo deportivo pregrabado y lo relaciona con un sistema de generadores visuales autónomos. Ocho canales salen de un solo ordenador mediante dos ventanas de presentación, cada una dividida en cuatro segmentos verticales para un controlador ICUIXIAN.
 
-> **Estado de implementación:** la arquitectura de dos máquinas con 8 canales y la capa de sincronización de red están actualmente en desarrollo. La compilación de una sola máquina con 4 canales es totalmente funcional y sirve como base de desarrollo.
+> **Compatibilidad:** `singleWindow` conserva la presentación funcional de cuatro canales. `dualWindow8` activa las dos salidas segmentadas y los canales 0–7. El compositor visual es optativo; desactivado, mantiene el flujo de vídeo existente.
 
 ---
 
@@ -16,77 +16,37 @@ La instalación no intenta analizar ni interpretar el partido. Usa el movimiento
 
 ## Arquitectura del sistema
 
-La instalación completa corre en dos ordenadores conectados por red local. Cada máquina ejecuta la misma aplicación openFrameworks gestionando cuatro canales y cuatro monitores en vertical. Una capa de sincronización de red (en desarrollo) mantiene el estado del `GlobalDirector` coherente entre ambas máquinas. El motor de audio SuperCollider corre en una máquina y recibe OSC de ambas.
+La instalación completa corre en un ordenador. Comparte `ClipPool`, `VideoDirector`, `GlobalDirector`, `VisualComposer` y `OSCSender` entre ocho instancias de `Channel`. Las dos ventanas de presentación comparten el contexto OpenGL: la ventana A dibuja canales 0–3 y la B canales 4–7.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","secondaryColor":"#1a1a1a","tertiaryColor":"#101010","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8","edgeLabelBackground":"#1a1a1a"}}}%%
 flowchart TB
-    subgraph MA["MÁQUINA A · canales 0-3"]
-        direction TB
-        A_SET["settings.json"]
-        A_POOL["ClipPool<br/>historial anti-repetición por canal<br/>getIndependentClip / getSharedClip"]
-        A_DIR["VideoDirector<br/>planificación cinematográfica<br/>ShortFragment / LongFragment / FullVideo"]
-        A_CH["4 × Channel<br/>recibe VideoPlan · ofVideoPlayer"]
-        A_CV["CVPipeline — OpenCV<br/>sustracción de fondo · flujo óptico<br/>contornos · seguimiento de blobs"]
-        A_EV["EventDetector<br/>colisión · balón · multitud · piernas"]
-        A_GS["GraphicScore<br/>13 modos visuales · secuencia automática"]
-        A_SCR["4 × pantalla vertical<br/>1080 × 1920"]
-        A_OSC["OSCSender<br/>3 bundles UDP / fotograma · 30 fps"]
-        A_GD["GlobalDirector<br/>slow-mo · fast-fwd · borrado"]
-        A_UI["ControlApp — ImGui<br/>Overview · Global Director · Channel Editor"]
-
-        A_SET --> A_POOL --> A_DIR --> A_CH --> A_CV --> A_EV --> A_GS --> A_SCR
-        A_EV --> A_OSC
-        A_UI --> A_GD
-        A_GD --> A_CH
-        A_GD --> A_GS
-    end
-
-    subgraph MB["MÁQUINA B · canales 4-7"]
-        direction TB
-        B_PIPE["mismo pipeline<br/>ClipPool · VideoDirector<br/>CVPipeline · EventDetector · GraphicScore"]
-        B_SCR["4 × pantalla vertical<br/>1080 × 1920"]
-        B_OSC["OSCSender<br/>canales 4-7"]
-        B_GD["GlobalDirector<br/>réplica del estado"]
-
-        B_GD --> B_PIPE
-        B_PIPE --> B_SCR
-        B_PIPE --> B_OSC
-    end
-
-    SC["SuperCollider<br/>pdj_datamatics.scd<br/>pdj_mode_voices.scd"]
-    AUD["Sistema Midas<br/>salida de sala"]
-
-    A_OSC -->|"OSC · host:9001"| SC
-    B_OSC -->|"OSC · host:9001"| SC
-    SC --> AUD
-    A_GD -.->|"LAN — sync director<br/>OSC/UDP · en desarrollo"| B_GD
-
-    classDef out fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
-    classDef ev fill:#1a0606,stroke:#ff2b2b,color:#ff7a7a
-    classDef osc fill:#050c1c,stroke:#3a7bff,color:#84aaff
-    class A_SCR,B_SCR out
-    class A_EV,A_GD,B_GD ev
-    class A_OSC,B_OSC,SC,AUD osc
+    Settings[settings.json] --> VideoDirector
+    Settings --> VisualComposer
+    ClipPool --> VideoDirector
+    VideoDirector --> Channels["8 x Channel"]
+    VisualComposer --> Channels
+    GlobalDirector --> Channels
+    Channels --> WindowA["Presentation A: channels 0-3"]
+    Channels --> WindowB["Presentation B: channels 4-7"]
+    WindowA --> ControllerA["ICUIXIAN A"]
+    WindowB --> ControllerB["ICUIXIAN B"]
+    Channels --> OSCSender
+    OSCSender --> SuperCollider
 ```
 
 **Distribución física de los ocho canales:**
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8"}}}%%
 flowchart LR
-    subgraph BA["Máquina A · 4 salidas HDMI"]
+    subgraph BA["Ventana A / ICUIXIAN A"]
         direction LR
         P0["Ch 0"] ~~~ P1["Ch 1"] ~~~ P2["Ch 2"] ~~~ P3["Ch 3"]
     end
-    subgraph BB["Máquina B · 4 salidas HDMI"]
+    subgraph BB["Ventana B / ICUIXIAN B"]
         direction LR
         P4["Ch 4"] ~~~ P5["Ch 5"] ~~~ P6["Ch 6"] ~~~ P7["Ch 7"]
     end
     BA ~~~ BB
-
-    classDef out fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
-    class P0,P1,P2,P3,P4,P5,P6,P7 out
 ```
 
 Cada monitor es 9:16 en vertical a 1080 × 1920 px. Anchura lógica total del sistema: 8640 px.
@@ -267,6 +227,36 @@ Todos los modos que no usan color en bruto comienzan con este shader GLSL. Convi
 
 **HUD de datos** — siempre visible sobre cualquier modo: barra de energía vertical (2 px) en el borde izquierdo, contador de fotogramas y recuento de blobs en la esquina inferior izquierda, mira de cruz sobre el balón cuando se detecta.
 
+### Lenguaje visual procedimental
+
+`VisualGenerator` añade ocho escenas sintéticas que pueden ocupar la pantalla sin vídeo o transformar el último fotograma capturado:
+
+- **RasterPulse:** bandas, obturadores, bloques de prueba e inversiones cuantizadas.
+- **BitMatrix:** celdas binarias derivadas de movimiento y blobs.
+- **ModularGrid:** retículas, subdivisiones y ocupación variable.
+- **PhaseLines:** Lissajous, interferencia y sistemas de líneas pulsantes.
+- **VectorField:** vectores derivados del flujo óptico que persisten después del vídeo.
+- **DataLedger:** coordenadas, metadatos, contadores y matrices numéricas.
+- **SignalTrace:** históricos de señal y rastrogramas.
+- **ThresholdBridge:** rasterización y disolución del vídeo hacia una escena sintética.
+
+La paleta mantiene negro/blanco con acentos rojos y azul eléctrico. La variación se calcula a partir de semilla, tiempo y datos; no usa aleatoriedad nueva en cada fotograma.
+
+#### Gramática para ocho pantallas
+
+`OrganizationMode` separa la escena visual de su distribución espacial:
+
+1. **Unison:** una regla común en los ocho canales, con variaciones mínimas.
+2. **Propagation:** el evento viaja por los canales mediante retardos ordenados.
+3. **Counterpoint:** cada canal asume un rol: cuerpo, trayectoria, velocidad, relaciones, densidad, campo, predicción o metadatos.
+4. **4 + 4:** canales 0–3 observan archivo/presente/cuerpos/movimiento; canales 4–7 interpretan datos/posibilidad/relaciones/predicción.
+
+Cada capítulo generativo recorre **Appearance → Development → Threshold → Transformation → Dissolution**. Las etapas no tienen igual duración: Appearance y Development protegen la legibilidad de la regla; Transformation transfiere retícula, fase, trayectoria, ritmo o máscara al capítulo siguiente; Dissolution puede decaer o terminar con un corte preciso.
+
+`VisualComposer` trabaja en tres escalas: capítulo, frase y arco. Sus elecciones ponderadas excluyen repeticiones recientes y respetan duraciones mínimas. Los estados `Breath` introducen negro, quietud o marcas escasas para evitar actividad constante. El compositor está desactivado por defecto en `settings.json`.
+
+En modo de ocho canales, `cv.eightChannelEveryNFrames` escalona el análisis CV entre canales y los capítulos sintéticos suspenden decodificación/readback. La vista Overview muestra el coste `Update` en milisegundos por canal para verificar el presupuesto de 30 fps.
+
 ---
 
 ## Elementos compositivos
@@ -320,11 +310,11 @@ Todos los ramps usan ease Hermite: `t² × (3 − 2t)`.
 
 Los disparadores manuales (Slow Mo, Fast Fwd, Clear Black, Clear Red) están disponibles en todo momento desde la ControlApp. Los auto-disparadores se habilitan por separado (`autoSlow`, `autoFast`, `autoClear`).
 
-**Sincronización entre máquinas (en desarrollo):** la Máquina A actúa como autoridad. Cuando su director dispara cualquier trigger, emite el evento y el estado completo de parámetros a la Máquina B por OSC/UDP. El guard interno de fotograma en `GlobalDirector` evita actualizaciones duplicadas.
+**Sincronización entre ventanas:** ambas ventanas de presentación comparten el mismo `GlobalDirector`, `VideoDirector` y `VisualComposer`. Los guards por número de fotograma evitan que dos apps de ventana avancen el tiempo global dos veces.
 
 ### Director de Vídeo (VideoDirector)
 
-`VideoDirector` es el director cinematográfico del material de archivo. Gestiona qué clip se reproduce en cada canal, desde qué punto y durante cuánto tiempo, introduciendo además **eventos compartidos** donde los cuatro canales reproducen el mismo fragmento simultáneamente.
+`VideoDirector` es el director cinematográfico del material de archivo. Gestiona qué clip se reproduce en cada canal, desde qué punto y durante cuánto tiempo, introduciendo además **eventos compartidos** donde todos los canales activos reproducen el mismo fragmento simultáneamente.
 
 `VideoDirector::update()` se llama cada fotograma y alterna entre dos regímenes: programación independiente por canal y, periódicamente, el evento compartido con su protocolo de arranque sincronizado.
 
@@ -382,20 +372,22 @@ El canal implementa la lógica de reproducción del plan: busca el punto de inic
 - Mantiene su propio historial deslizante de 3 clips para el evento compartido.
 - Elige entre todos los clips no utilizados recientemente en eventos compartidos.
 
-### Ocho canales en dos máquinas
+### Ocho canales en dos ventanas
 
-Cada máquina ejecuta cuatro instancias del pipeline en paralelo. Dentro de una máquina el `ClipPool` y el `VideoDirector` son compartidos por los cuatro canales, de modo que la programación es coordinada (no hay dos canales jugando el mismo clip simultáneamente en modo independiente). Across ambas máquinas, la poliritmia visual se extiende a ocho columnas.
+Un proceso ejecuta ocho pipelines. `ClipPool`, `VideoDirector`, `GlobalDirector` y `VisualComposer` son compartidos por todos los canales, de modo que la programación, el reloj y los eventos colectivos permanecen coordinados.
 
-El `GlobalDirector` sincroniza la sensación temporal en los ocho canales: dentro de una máquina en proceso; entre máquinas mediante la capa de red en desarrollo.
+El `GlobalDirector` sincroniza la sensación temporal y el `VisualComposer` organiza capítulos en unísono, propagación, contrapunto o grupos 4 + 4.
 
 Distribución de monitores:
-- Máquina A → columnas 0–3 (banco izquierdo)
-- Máquina B → columnas 4–7 (banco derecho)
-- Anchura total: 8640 px (8 × 1080). Cada monitor es 9:16 en vertical.
+- Ventana / ICUIXIAN A → canales 0–3
+- Ventana / ICUIXIAN B → canales 4–7
+- Cada enlace ordenador → controlador usa 1920×1080 a 60 Hz. La ventana se
+  divide en cuatro regiones de 480×1080 antes de que el controlador escale y
+  rote sus cuatro salidas.
 
 ### Transmisión de datos OSC
 
-Cada máquina transmite tres bundles UDP por fotograma (~30 fps). Las direcciones son indexadas por canal (`/pdj/channel/0` a `/pdj/channel/3` por máquina).
+El proceso transmite cuatro bundles UDP pequeños por canal y fotograma (~30 fps): core, blobs, contexto y generador. Las direcciones son únicas de `/pdj/channel/0` a `/pdj/channel/7`.
 
 **Bundle core** — un mensaje por valor escalar:
 
@@ -435,6 +427,18 @@ Cada máquina transmite tres bundles UDP por fotograma (~30 fps). Las direccione
 | `.../director/speed` | float | multiplicador de velocidad actual |
 | `.../director/clear` | int | `ClearPhase`: 0=Idle 1=FadeIn 2=Hold 3=FadeOut |
 | `.../director/clear_alpha` | float | opacidad del borrado, 0–1 |
+| `.../generator/active` | int | 1 durante Generator o Transition |
+| `.../generator/mode` | int | escena 0–7 |
+| `.../generator/revision` | int | revisión de capítulo |
+| `.../generator/organization` | int | Unison, Propagation, Counterpoint o 4 + 4 |
+| `.../generator/role` | int | rol analítico del canal 0–7 |
+| `.../generator/stage` | int | etapa temporal 0–4 |
+| `.../generator/stage_progress` | float | progreso interno de etapa, 0–1 |
+| `.../generator/beat_phase` | float | fase del pulso compartido, 0–1 |
+| `.../generator/beat_index` | int | contador de pulsos |
+| `.../generator/envelope` | float | envolvente narrativa, 0–1 |
+| `.../generator/seed` | int | semilla reproducible del capítulo |
+| `.../generator/transition` | int | 1 durante ThresholdBridge |
 
 ### Motor de audio SuperCollider
 
@@ -539,7 +543,7 @@ Cada modo visual tiene su propio SynthDef con una identidad sonora coherente con
 
 **Vigilancia de telemetría:** un canal cuyo paquete `state/frame` no llega en 1 s se marca como offline con aviso en consola.
 
-El motor está configurado para `~numChannels = 4`. Expandir a 8 canales para la configuración de dos máquinas requiere actualizar `~numChannels` y el array `~channelBases`.
+El motor está configurado para `~numChannels = 8` y ocho frecuencias base en `~channelBases`.
 
 ---
 
@@ -699,9 +703,13 @@ Todos los parámetros en tiempo de ejecución están en `bin/data/settings.json`
 | `_installationLayout` | instalación — 4 × 1080×1920 en vertical |
 | `_installationControl` | ventana de control en instalación |
 
-Para la configuración de dos máquinas, cada máquina usa su propia copia de `settings.json` con coordenadas de ventana relativas a sus pantallas. El bloque `osc.host` en la Máquina B debe apuntar a la IP de la Máquina A. La capa de sincronización de red planificada añadirá un bloque `networkSync`.
+Para ocho pantallas, usar `outputMode: "dualWindow8"`. El botón **Configure
+ICUIXIAN outputs** busca dos salidas externas independientes, cambia ambas a
+1920×1080 a 60 Hz y guarda sus posiciones en `presentationWindows`. Cada
+ventana entrega cuatro segmentos al controlador correspondiente. Es necesario
+reiniciar la aplicación después de configurarlas.
 
-La ControlApp (tecla `U`) da acceso en vivo a todos los parámetros sin recompilar. En la configuración de dos máquinas, la ControlApp de la Máquina A es la superficie de control principal.
+La ControlApp (tecla `U`) da acceso en vivo a vídeo, compositor, organización espacial y parámetros por canal sin recompilar.
 
 ---
 
@@ -725,37 +733,62 @@ make && bin/Partitura_del_Juego
 ~shutdown.();
 ```
 
-### Instalación (dos máquinas, 8 canales)
-
-Ambas máquinas deben tener copias idénticas de la carpeta `cortos/` y la aplicación compilada.
-
-**Máquina A (primaria):**
+### Instalación (una máquina, 8 canales)
 
 ```bash
-# settings.json: usar _installationLayout (canales 0–3)
+# settings.json
+# outputMode: "dualWindow8"
+# presentationWindows: dos escritorios ICUIXIAN de 1920x1080
 # osc.host: localhost
-# networkSync.role: "primary"   [campo planificado]
-# networkSync.broadcastTo: "<IP Máquina B>:<puerto>"  [campo planificado]
 make && bin/Partitura_del_Juego
 
 # SuperCollider
-# Editar pdj_datamatics.scd: ~numChannels = 8
-# Actualizar ~channelBases para 8 canales
+# pdj_datamatics.scd ya usa ~numChannels = 8
 # Cmd+Enter
 ```
 
-**Máquina B (secundaria):**
+**Orden de arranque:** encender ambas cadenas de pantallas/controladores, iniciar SuperCollider y después la aplicación. La única ControlApp gobierna los ocho canales.
 
-```bash
-# settings.json: usar _installationLayout (canales 4–7, ajustar x para los monitores de B)
-# osc.host: <IP Máquina A>
-# networkSync.role: "secondary"  [campo planificado]
-# networkSync.listenPort: <puerto>  [campo planificado]
-make && bin/Partitura_del_Juego
-# No se necesita SuperCollider en B
-```
+#### Ajuste de los controladores ICUIXIAN
 
-**Orden de arranque:** iniciar primero la Máquina A (SuperCollider y director listos) y después la Máquina B. La ControlApp de la Máquina A es la superficie de control principal de la instalación completa.
+La configuración está dirigida al ICUIXIAN `0104-XZ` (ASIN
+`B0DM98NVSH`). En cada unidad:
+
+1. Conectar una salida independiente del Mac a `HDMI IN`.
+2. Conectar `HDMI OUT 1–4` a las cuatro pantallas en el orden físico.
+3. Seleccionar el mosaico `4×1` y rotación de `90°` para las pantallas en
+   vertical. Si la instalación física queda invertida, usar `270°`.
+4. Desactivar el mirroring de macOS y usar escritorio extendido.
+5. En la ControlApp pulsar **Configure ICUIXIAN outputs** y reiniciar.
+
+La ficha técnica limita los modos de mosaico con rotación a entrada
+1920×1080; 3840×2160 a 30 Hz sólo es válido para modos sin esa rotación. El
+botón rechaza configuraciones donde macOS no exponga 1080p60 en ambos
+controladores.
+
+#### Prueba de rendimiento
+
+La página **Performance** de la ControlApp ejecuta una prueba reproducible de
+10 minutos sobre las dos ventanas y los ocho canales. Tras 10 segundos de
+calentamiento recorre vídeo normal, `VideoLines`, `VideoNumbers`, `SlitScan`
+con cambios de clip y los ocho generadores. Al terminar restaura los modos
+forzados y la activación original del compositor.
+
+La prueba mide FPS y percentiles de tiempo de cuadro por ventana, tiempo GPU
+sin bloquear el render, decodificación, render de vídeo, lectura GPU→CPU,
+OpenCV, composición, OSC, uso de CPU y memoria residente. El resultado pasa
+cuando ambas ventanas mantienen al menos 29 FPS, p95 inferior a 38 ms, menos
+de 0.5% de cuadros por encima de 50 ms, ningún atasco superior a 100 ms y
+crecimiento de memoria inferior a 256 MB.
+
+Los botones **Start**, **Stop**, **Reset** y **Export report** controlan la
+prueba. Al detenerse o completarse se escriben automáticamente JSON y CSV en
+`~/Documents/PartituraDelJuego/performance_reports/`; así funciona igual en
+otros Macs sin modificar la firma del paquete. Cerrar la aplicación durante
+una prueba guarda un informe parcial. El JSON incluye configuración, resultados
+por fase, causas de fallo y los subsistemas, canales y modos visuales más
+lentos. Los límites y la duración se ajustan en
+`settings.json.performanceTest`.
 
 ---
 
@@ -763,7 +796,7 @@ make && bin/Partitura_del_Juego
 
 ![Mapa de conexiones de la instalación](img/mapa.png)
 
-El mapa describe el cableado físico de la instalación completa: ocho pantallas verticales, dos ordenadores, la consola de audio, el router de red local y la distribución eléctrica. Los colores del diagrama codifican el tipo de línea:
+El mapa incluido corresponde al diseño físico anterior de dos ordenadores. Para la versión actual, sustituir los dos nodos de ordenador por una máquina con dos salidas hacia dos controladores ICUIXIAN; cada controlador distribuye cuatro segmentos a cuatro pantallas.
 
 | Color | Tipo de línea |
 |---|---|
@@ -776,27 +809,28 @@ El mapa describe el cableado físico de la instalación completa: ocho pantallas
 | Cant. | Equipo | Función en el sistema |
 |---|---|---|
 | 8 | Monitor / pantalla 1080 × 1920 (9:16, montaje en vertical) | Una pantalla por canal — salida de `GraphicScore`. Rotadas a modo retrato desde el sistema operativo |
-| 2 | Ordenador (comp 1 / comp 2) con 4 salidas de vídeo cada uno | Cada máquina ejecuta una instancia de `Partitura_del_Juego` con 4 canales. Requieren GPU capaz de sostener 4 × 1080×1920 a 30 fps |
+| 1 | Ordenador con dos salidas HDMI independientes | Entrega dos señales 1920×1080 a 60 Hz y ejecuta ocho canales a 30 fps |
+| 2 | ICUIXIAN 0104-XZ, ASIN B0DM98NVSH | Cada unidad divide una entrada 1080p60 en cuatro salidas verticales |
 | 1 | Consola / sistema de audio Midas | Salida y mezcla del motor SuperCollider hacia el sistema de sala |
-| 1 | Modem / router con switch Gigabit | LAN de la instalación — transporta el OSC de sincronización del `GlobalDirector` y el OSC de datos hacia SuperCollider |
-| 8 | Cable HDMI | Un cable por pantalla, 4 desde cada ordenador |
-| 3 | Cable Ethernet Cat5e/Cat6 | comp 1 → router, comp 2 → router, y enlace de red hacia el sistema Midas |
-| 2 | Multicontacto / regleta a 120 V | Un multicontacto por banco: alimenta 4 pantallas + 1 ordenador |
-| 1 | Adaptador de teclado/ratón o control remoto en la máquina primaria | Acceso a la ControlApp (tecla `U`) durante la función |
+| 1 | Modem / router con switch Gigabit | Red para audio/control cuando el sistema Midas lo requiere |
+| 10 | Cable HDMI | Dos enlaces ordenador→ICUIXIAN y ocho enlaces ICUIXIAN→pantallas |
+| 1+ | Cable Ethernet Cat5e/Cat6 | Enlace hacia el sistema Midas/control de sala |
+| 2 | Multicontacto / regleta a 120 V | Un multicontacto por banco de cuatro pantallas |
+| 1 | Teclado/ratón o control remoto | Acceso a la ControlApp (tecla `U`) |
 
 Opcionales según sala: extensiones eléctricas, canaletas o cinta gaffer para el cableado, y un monitor auxiliar para la ControlApp (el `settings.json` de instalación ya reserva una ventana de control de 1280 × 800).
 
 ### Descripción del setup
 
-**Reparto de vídeo.** Cada ordenador alimenta cuatro pantallas por HDMI. Un ordenador corre los canales 0–3 (pantallas 1–4) y el otro los canales 4–7 (pantallas 5–8), exactamente el reparto descrito en *Ocho canales en dos máquinas*. En cada máquina, el `settings.json` usa el preset `_installationLayout` y las coordenadas `x` de las cuatro ventanas se ajustan a la posición real de sus monitores en el escritorio extendido.
+**Reparto de vídeo.** La ventana A contiene canales 0–3 y alimenta ICUIXIAN A; la ventana B contiene canales 4–7 y alimenta ICUIXIAN B. `presentationWindows` ajusta posición y tamaño dentro del escritorio extendido.
 
-**Red.** Ambos ordenadores se conectan al router por Ethernet cableado (nunca Wi-Fi: la sincronización del `GlobalDirector` y los tres bundles OSC por fotograma dependen de latencia estable). El router solo se usa como switch de la instalación; no requiere salida a internet. La máquina primaria es la que corre SuperCollider y actúa como autoridad del director; en la secundaria, `osc.host` apunta a la IP de la primaria.
+**Reloj.** `GlobalDirector`, `VideoDirector` y `VisualComposer` viven en el mismo proceso. Las dos ventanas comparten contexto GL y guard de fotograma, por lo que no necesitan sincronización de red.
 
 **Audio.** SuperCollider corre en una sola máquina y recibe el OSC de los ocho canales. Su salida va al sistema Midas a través del enlace de red del diagrama (o por interfaz de audio si se prefiere salida analógica), y desde ahí al sistema de sala. La máquina que sostiene el audio es la única que necesita `pdj_datamatics.scd` cargado, con `~numChannels = 8` y `~channelBases` ampliado a ocho canales.
 
-**Eléctrico.** Cada banco de cuatro pantallas comparte multicontacto con su ordenador, y ambos multicontactos parten de la misma fase de 120 V para evitar bucles de masa entre los bancos y la consola de audio. Consumo estimado: 8 pantallas + 2 ordenadores, a dimensionar según el modelo exacto de monitor antes de asignar circuitos.
+**Eléctrico.** Ambos bancos deben partir de la misma fase de 120 V para evitar bucles de masa. Dimensionar el circuito para ocho pantallas, dos controladores y un ordenador.
 
-**Orden de encendido.** Multicontactos → pantallas (verificar rotación a vertical) → router → máquina primaria (`make && bin/Partitura_del_Juego`, después SuperCollider) → máquina secundaria. Apagado en orden inverso.
+**Orden de encendido.** Multicontactos → pantallas → ICUIXIAN → ordenador → SuperCollider → aplicación. Apagado en orden inverso.
 
 ---
 

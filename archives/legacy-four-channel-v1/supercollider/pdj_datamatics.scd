@@ -16,19 +16,18 @@
   they no longer dominate it.
 
   Receives OSC from openFrameworks (OSCSender) on UDP port 9001:
-    /pdj/channel/{0-7}/flow/magnitude|angle
-    /pdj/channel/{0-7}/motion/energy
-    /pdj/channel/{0-7}/blobs/count
-    /pdj/channel/{0-7}/contour/length
-    /pdj/channel/{0-7}/blob/{0-7}/state
+    /pdj/channel/{0-3}/flow/magnitude|angle
+    /pdj/channel/{0-3}/motion/energy
+    /pdj/channel/{0-3}/blobs/count
+    /pdj/channel/{0-3}/contour/length
+    /pdj/channel/{0-3}/blob/{0-7}/state
         args: active, x, y, vx, vy, area, bbW, bbH
-    /pdj/channel/{0-7}/event/collision|ball|ball/x|ball/y|crowd|leg_distance
-    /pdj/channel/{0-7}/score/mode   (0-13)
-    /pdj/channel/{0-7}/state/frame|time
-    /pdj/channel/{0-7}/video/name|position|duration|revision
-    /pdj/channel/{0-7}/score/revision
-    /pdj/channel/{0-7}/director/temporal|speed|clear|clear_alpha
-    /pdj/channel/{0-7}/generator/*
+    /pdj/channel/{0-3}/event/collision|ball|ball/x|ball/y|crowd|leg_distance
+    /pdj/channel/{0-3}/score/mode   (0-13)
+    /pdj/channel/{0-3}/state/frame|time
+    /pdj/channel/{0-3}/video/name|position|duration|revision
+    /pdj/channel/{0-3}/score/revision
+    /pdj/channel/{0-3}/director/temporal|speed|clear|clear_alpha
 
   Usage:
     1. Boot this file (Cmd+Enter on the outer block, or evaluate sections top-down)
@@ -40,15 +39,13 @@
 */
 
 (
-var scriptDir = PathName(thisProcess.nowExecutingPath).pathOnly;
-
 s.waitForBoot({
 
 	// --------------------------------------------------------------------------
 	// CONFIG
 	// --------------------------------------------------------------------------
 	~oscPort     = 9001;
-	~numChannels = 8;
+	~numChannels = 4;
 	~masterGain  = 0.55;
 
 	// Short-term organic wander on top of the module baseline below — never
@@ -163,16 +160,6 @@ s.waitForBoot({
 			speedMultiplier: 1.0,
 			clearPhase: 0,
 			clearAlpha: 0.0,
-			generatorActive: 0,
-			generatorMode: -1,
-			generatorRevision: 0,
-			generatorOrganization: 0,
-			generatorRole: 0,
-			generatorStage: 0,
-			generatorStageProgress: 0.0,
-			generatorBeatPhase: 0.0,
-			generatorBeatIndex: -1,
-			generatorEnvelope: 0.0,
 			prevColl:  0,
 			prevBall:  0,
 			lastGlitch: 0.0,
@@ -206,7 +193,7 @@ s.waitForBoot({
 
 	~ch.do { |st, i|
 		st.ampBus.set(0);
-		st.panBus.set(i.linlin(0, ~numChannels - 1, -0.85, 0.85));
+		st.panBus.set(i.linlin(0, 3, -0.85, 0.85));
 		st.rateBus.set(1);
 		st.noiseBus.set(0);
 		st.tensionBus.set(st.scene.tension);
@@ -221,7 +208,7 @@ s.waitForBoot({
 	~gGate1Bus.set(1); ~gGate2Bus.set(1); ~gGate3Bus.set(1);
 
 	thisProcess.interpreter.executeFile(
-		scriptDir +/+ "pdj_mode_voices.scd"
+		"/Users/microhm/Desktop/01_Proyectos/Partitura_del_Juego/supercollider/pdj_mode_voices.scd"
 	);
 	~installModeVoices.value;
 
@@ -485,7 +472,7 @@ s.waitForBoot({
 	~fxBus    = Bus.audio(s, 2);
 	~delayBus = Bus.audio(s, 2);
 	~master = Synth(\pdjMaster, [\inBus, ~fxBus, \delayBus, ~delayBus, \gain, ~masterGain]);
-	~channelBases = [31.7, 33.1, 35.9, 38.3, 41.1, 43.7, 47.3, 50.9];
+	~channelBases = [31.7, 33.1, 35.9, 38.3];
 
 	~toneBanks = Array.fill(~numChannels, { |i|
 		Synth(~modeSynthNames[0], [
@@ -816,7 +803,7 @@ s.waitForBoot({
 		var st, energy, flow, amp, pan, rate, noise, spaceW, activity, tension;
 		var slowBias, fastBias, clear, clipArc, voiceTarget, dynamicColor, variant;
 		var droneAmp, airAmp, pulseAmp, positionX;
-		var evolution, stage, formRise, formFall, microWindow, genEnvelope;
+		var evolution, stage, formRise, formFall, microWindow;
 		st     = ~ch[ch];
 		~deriveBlobState.(st);
 		energy = (st.energy * 6).clip(0, 1);
@@ -825,16 +812,7 @@ s.waitForBoot({
 		slowBias = ((1 - st.speedMultiplier) / 0.7).clip(0, 1);
 		fastBias = ((st.speedMultiplier - 1) / 2.5).clip(0, 1);
 		clear = st.clearAlpha.clip(0, 1);
-		genEnvelope = if(st.generatorActive > 0, {
-			st.generatorEnvelope.clip(0, 1)
-		}, {
-			0
-		});
-		evolution = if(st.generatorActive > 0, {
-			st.generatorStageProgress.clip(0, 1)
-		}, {
-			st.videoPos.clip(0, 1)
-		});
+		evolution = st.videoPos.clip(0, 1);
 		clipArc = (evolution * pi).sin;
 		stage = (evolution * 4).floor.clip(0, 3).asInteger;
 		if(stage != st.evolutionStage, {
@@ -877,7 +855,6 @@ s.waitForBoot({
 		// while movement controls speed.
 		rate = (
 			0.3 + (activity * 7) + (st.blobs.clip(0, 8) * 0.28)
-			+ (genEnvelope * 3.5)
 		).clip(0.3, 12) * st.speedMultiplier.clip(0.35, 2.2);
 
 		noise = (
@@ -898,7 +875,7 @@ s.waitForBoot({
 			* (1 - (clear * 0.86)) * (1 + (slowBias * 0.08));
 		airAmp = st.scene.air * (0.45 + (evolution * 0.85))
 			* (1 - (clear * 0.48)) * (1 + (fastBias * 0.42) + (tension * 0.12));
-		pulseAmp = (st.scene.pulse + (genEnvelope * 0.18)) * microWindow * 0.28
+		pulseAmp = st.scene.pulse * microWindow * 0.28
 			* (1 - clear) * (0.72 + (fastBias * 0.75) - (slowBias * 0.48));
 
 		st.ampBus.set(amp);
@@ -1201,54 +1178,6 @@ s.waitForBoot({
 		OSCdef(("pdj_clearAlpha_" ++ ch).asSymbol, { |msg|
 			~ch[ch].clearAlpha = msg[1].asFloat.clip(0, 1);
 		}, ("/pdj/channel/" ++ ch ++ "/director/clear_alpha").asSymbol);
-
-		OSCdef(("pdj_generatorActive_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorActive = msg[1].asInteger;
-		}, ("/pdj/channel/" ++ ch ++ "/generator/active").asSymbol);
-
-		OSCdef(("pdj_generatorMode_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorMode = msg[1].asInteger;
-		}, ("/pdj/channel/" ++ ch ++ "/generator/mode").asSymbol);
-
-		OSCdef(("pdj_generatorRevision_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorRevision = msg[1].asInteger;
-		}, ("/pdj/channel/" ++ ch ++ "/generator/revision").asSymbol);
-
-		OSCdef(("pdj_generatorOrganization_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorOrganization = msg[1].asInteger;
-		}, ("/pdj/channel/" ++ ch ++ "/generator/organization").asSymbol);
-
-		OSCdef(("pdj_generatorRole_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorRole = msg[1].asInteger;
-		}, ("/pdj/channel/" ++ ch ++ "/generator/role").asSymbol);
-
-		OSCdef(("pdj_generatorStage_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorStage = msg[1].asInteger;
-		}, ("/pdj/channel/" ++ ch ++ "/generator/stage").asSymbol);
-
-		OSCdef(("pdj_generatorStageProgress_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorStageProgress = msg[1].asFloat.clip(0, 1);
-		}, ("/pdj/channel/" ++ ch ++ "/generator/stage_progress").asSymbol);
-
-		OSCdef(("pdj_generatorBeatPhase_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorBeatPhase = msg[1].asFloat.clip(0, 1);
-		}, ("/pdj/channel/" ++ ch ++ "/generator/beat_phase").asSymbol);
-
-		OSCdef(("pdj_generatorBeat_" ++ ch).asSymbol, { |msg|
-			var beat = msg[1].asInteger;
-			var previous = ~ch[ch].generatorBeatIndex;
-			~ch[ch].generatorBeatIndex = beat;
-			if(
-				(~ch[ch].generatorActive > 0)
-				and: { beat != previous }
-				and: { (~ch[ch].generatorOrganization != 0) or: { ch == 0 } },
-				{ ~trigKick.(ch, 0.18 + (~ch[ch].generatorEnvelope * 0.18)) }
-			);
-		}, ("/pdj/channel/" ++ ch ++ "/generator/beat_index").asSymbol);
-
-		OSCdef(("pdj_generatorEnvelope_" ++ ch).asSymbol, { |msg|
-			~ch[ch].generatorEnvelope = msg[1].asFloat.clip(0, 1);
-		}, ("/pdj/channel/" ++ ch ++ "/generator/envelope").asSymbol);
 
 		OSCdef(("pdj_coll_" ++ ch).asSymbol, { |msg|
 			var v = msg[1].asInteger;
