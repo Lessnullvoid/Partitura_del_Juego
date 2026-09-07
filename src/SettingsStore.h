@@ -42,15 +42,37 @@ inline bool ensureUserSettings(std::string* error = nullptr) {
     return true;
 }
 
+inline void mergeObject(ofJson& destination, const ofJson& overrides) {
+    if (!destination.is_object() || !overrides.is_object()) {
+        destination = overrides;
+        return;
+    }
+    for (auto it = overrides.begin(); it != overrides.end(); ++it) {
+        if (destination.contains(it.key()) &&
+            destination[it.key()].is_object() && it.value().is_object()) {
+            mergeObject(destination[it.key()], it.value());
+        } else {
+            destination[it.key()] = it.value();
+        }
+    }
+}
+
 inline ofJson load(std::string* error = nullptr) {
+    ofJson settings = ofLoadJson(bundledDefaultsPath());
+    if (!settings.is_object())
+        settings = ofJson::object();
     if (ensureUserSettings(error)) {
-        const ofJson settings = ofLoadJson(settingsPath());
-        if (settings.is_object()) return settings;
-        if (error) *error = "User settings are invalid: " + settingsPath();
+        const ofJson userSettings = ofLoadJson(settingsPath());
+        if (userSettings.is_object()) {
+            mergeObject(settings, userSettings);
+            return settings;
+        }
+        if (error)
+            *error = "User settings are invalid: " + settingsPath();
     }
 
-    const ofJson defaults = ofLoadJson(bundledDefaultsPath());
-    if (defaults.is_object()) return defaults;
+    if (settings.is_object())
+        return settings;
     if (error && error->empty())
         *error = "Bundled settings are missing or invalid";
     return ofJson::object();

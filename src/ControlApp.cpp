@@ -75,13 +75,50 @@ static const char* kModeNames[] = {
     "ThermalVision", "SlitScan", "Flash", "Auto"
 };
 
+void ControlApp::buildWallSummaryFromSettings(const ofJson& cfg) {
+    wallASummary_.clear();
+    wallBSummary_.clear();
+    if (!cfg.contains("presentationWindows") ||
+        !cfg["presentationWindows"].is_array()) return;
+
+    const auto& wins = cfg["presentationWindows"];
+    const ofJson empty;
+    const ofJson& vwc = cfg.contains("videoWallController") &&
+                        cfg["videoWallController"].is_object()
+                        ? cfg["videoWallController"] : empty;
+
+    const auto buildLine = [&](size_t idx) -> std::string {
+        if (idx >= wins.size()) return "";
+        const auto& w = wins[idx];
+        const std::string layout = w.value("layout", "4x1");
+        const bool landscape = (layout == "2x2");
+        int rotDeg = landscape ? 0 : 90;
+        const char* wallKey = (idx == 0) ? "wallA" : "wallB";
+        if (vwc.contains(wallKey) && vwc[wallKey].is_object())
+            rotDeg = vwc[wallKey].value("rotationDegrees", rotDeg);
+        const int chStart = static_cast<int>(idx) * 4;
+        return (idx == 0 ? "WALL A  " : "WALL B  ") +
+               layout + (landscape ? " landscape" : " portrait") +
+               "  |  ICUIXIAN rotation " + std::to_string(rotDeg) + " deg" +
+               "  |  channels " + std::to_string(chStart) + "-" +
+               std::to_string(chStart + 3) +
+               "  |  " + std::to_string(w.value("width", 1920)) +
+               "x" + std::to_string(w.value("height", 1080)) +
+               " @ " + std::to_string(w.value("x", 0)) +
+               "," + std::to_string(w.value("y", 0));
+    };
+
+    wallASummary_ = buildLine(0);
+    wallBSummary_ = buildLine(1);
+}
+
 void ControlApp::setup() {
     ofSetBackgroundColor(15, 15, 15);
     gui_.setup();
 
     ImGuiIO& io = ImGui::GetIO();
-    // Do not write imgui.ini beside the executable. In a distributed macOS
-    // bundle that location is signed and must remain immutable after launch.
+    // No escribir imgui.ini junto al ejecutable. En un bundle macOS distribuido
+    // esa ubicación está firmada y debe permanecer inmutable tras el arranque.
     io.IniFilename = nullptr;
     io.Fonts->Clear();
     io.FontDefault =
@@ -123,16 +160,107 @@ void ControlApp::setup() {
     const ofJson cfg = SettingsStore::load();
     dualWindowConfigured_ =
         cfg.is_object() && cfg.value("outputMode", std::string()) == "dualWindow8";
+    if (cfg.is_object()) buildWallSummaryFromSettings(cfg);
+    oscReceiverReady_ = oscReceiver_.setup(oscListenPort_);
+    if (oscReceiverReady_)
+        ofLogNotice("OSCReceiver") << "Listening on port " << oscListenPort_;
+    else
+        ofLogWarning("OSCReceiver") << "Could not listen on port "
+                                    << oscListenPort_;
     if (performance_ && std::getenv("PDJ_PERF_AUTOSTART"))
         performance_->start(channels_, composer_);
 }
 
 void ControlApp::update() {
+    pollVpcOsc();
     if (!performance_) return;
     performance_->update(channels_, composer_);
     if (performance_->hasResults() &&
         std::getenv("PDJ_PERF_EXIT_ON_COMPLETE")) {
         ofExit(0);
+    }
+}
+
+void ControlApp::pollVpcOsc() {
+    if (!oscReceiverReady_)
+        return;
+    while (oscReceiver_.hasWaitingMessages()) {
+        ofxOscMessage message;
+        oscReceiver_.getNextMessage(message);
+        const auto parts = ofSplitString(message.getAddress(), "/", true, true);
+        if (parts.size() == 3 && parts[0] == "pdjv" &&
+            parts[1] == "program" && composer_) {
+            const std::string& command = parts[2];
+            if (command == "next") {
+                composer_->forceNextMoment();
+            } else if (command == "takeover") {
+                const int generator = message.getNumArgs() > 0
+                    ? message.getArgAsInt32(0) : -1;
+                composer_->forceTakeover(generator);
+            } else if (command == "enabled" &&
+                       message.getNumArgs() > 0) {
+                composer_->params().programEnabled =
+                    message.getArgAsInt32(0) != 0;
+            } else if (command == "dualVideoProbability" &&
+                       message.getNumArgs() > 0) {
+                composer_->params().dualVideoProbability =
+                    ofClamp(message.getArgAsFloat(0), 0.f, 1.f);
+            }
+            continue;
+        }
+        if (parts.size() == 3 && parts[0] == "pdjv" &&
+            parts[1] == "generator" && message.getNumArgs() > 0) {
+            for (Channel* channel : channels_) {
+                if (!channel) continue;
+                GeneratorRuntimeParams& params = channel->generatorParams();
+                if (parts[2] == "intensity")
+                    params.intensity =
+                        ofClamp(message.getArgAsFloat(0), 0.f, 1.f);
+                else if (parts[2] == "density")
+                    params.density =
+                        ofClamp(message.getArgAsFloat(0), 0.f, 1.f);
+                else if (parts[2] == "glowGain")
+                    params.glowGain =
+                        ofClamp(message.getArgAsFloat(0), 0.f, 1.5f);
+                else if (parts[2] == "glowRadius")
+                    params.glowRadius =
+                        ofClamp(message.getArgAsFloat(0), 0.25f, 4.f);
+                else if (parts[2] == "feedbackDecay")
+                    params.feedbackDecay =
+                        ofClamp(message.getArgAsFloat(0), 0.f, 0.94f);
+            }
+            continue;
+        }
+        if (parts.size() == 3 && parts[0] == "pdjv" &&
+            parts[1] == "visuals" && parts[2] == "invert" &&
+            message.getNumArgs() > 0) {
+            const bool inverted = message.getArgAsInt32(0) != 0;
+            for (Channel* channel : channels_) {
+                if (channel) channel->setInvertPolarity(inverted);
+            }
+            continue;
+        }
+        if (parts.size() == 3 && parts[0] == "pdjv" &&
+            parts[1] == "vpc") {
+            for (auto* channel : channels_) {
+                if (parts[2] == "reset")
+                    channel->resetVideoPointCloudFeedback();
+                else
+                    channel->applyVpcOscParam(parts[2], message);
+            }
+            continue;
+        }
+        if (parts.size() == 5 && parts[0] == "pdjv" &&
+            parts[1] == "channel" && parts[3] == "vpc") {
+            const int channelIndex = ofToInt(parts[2]);
+            if (channelIndex < 0 ||
+                channelIndex >= static_cast<int>(channels_.size()))
+                continue;
+            if (parts[4] == "reset")
+                channels_[channelIndex]->resetVideoPointCloudFeedback();
+            else
+                channels_[channelIndex]->applyVpcOscParam(parts[4], message);
+        }
     }
 }
 
@@ -365,7 +493,8 @@ bool ControlApp::detectAndSaveDualOutputs() {
             {"x", static_cast<int>(display.bounds.origin.x)},
             {"y", static_cast<int>(display.bounds.origin.y)},
             {"width", static_cast<int>(display.bounds.size.width)},
-            {"height", static_cast<int>(display.bounds.size.height)}
+            {"height", static_cast<int>(display.bounds.size.height)},
+            {"layout", "4x1"}
         });
     }
     cfg["outputMode"] = "dualWindow8";
@@ -375,12 +504,14 @@ bool ControlApp::detectAndSaveDualOutputs() {
         {"model", "0104-XZ"},
         {"asin", "B0DM98NVSH"},
         {"controllers", 2},
-        {"layoutPerController", "4x1"},
-        {"rotationDegrees", 90},
         {"inputWidth", kIcuixianInputWidth},
         {"inputHeight", kIcuixianInputHeight},
-        {"refreshHz", kIcuixianRefreshHz}
+        {"refreshHz", kIcuixianRefreshHz},
+        {"wallA", {{"layout", "4x1"}, {"layoutPerController", "4x1"}, {"rotationDegrees", 90}, {"panelOrientation", "portrait"}, {"panels", 4}}},
+        {"wallB", {{"layout", "4x1"}, {"layoutPerController", "4x1"}, {"rotationDegrees", 90}, {"panelOrientation", "portrait"}, {"panels", 4}}}
     };
+    // Ambos muros son verticales aquí (botón 4V+4V). Para mixto vertical+horizontal
+    // usar "Configure Mixed Wall (4V + 2x2H)", que pone wallB rotationDegrees=0.
 
     if (!SettingsStore::save(cfg, &settingsError)) {
         outputModeError_ = settingsError.empty()
@@ -391,15 +522,187 @@ bool ControlApp::detectAndSaveDualOutputs() {
     const auto& a = candidates[0].bounds;
     const auto& b = candidates[1].bounds;
     detectedOutputSummary_ =
-        "ICUIXIAN 0104-XZ: A " +
+        "ICUIXIAN A " +
         ofToString(static_cast<int>(a.size.width)) + "x" +
         ofToString(static_cast<int>(a.size.height)) + " @ " +
         ofToString(static_cast<int>(a.origin.x)) + "," +
-        ofToString(static_cast<int>(a.origin.y)) + " | B " +
+        ofToString(static_cast<int>(a.origin.y)) +
+        " [4x1 portrait rot 90] | B " +
         ofToString(static_cast<int>(b.size.width)) + "x" +
         ofToString(static_cast<int>(b.size.height)) + " @ " +
         ofToString(static_cast<int>(b.origin.x)) + "," +
-        ofToString(static_cast<int>(b.origin.y));
+        ofToString(static_cast<int>(b.origin.y)) + " [4x1 portrait rot 90]";
+    buildWallSummaryFromSettings(cfg);
+    outputModeError_.clear();
+    dualWindowConfigured_ = true;
+    outputRestartRequired_ = true;
+    return true;
+}
+
+bool ControlApp::configureMixedWall() {
+    // Ejecuta la misma detección de pantallas que detectAndSaveDualOutputs() pero
+    // guarda Wall A como 4x1 vertical (4 franjas, ICUIXIAN rotado 90 deg) y
+    // Wall B como 2x2 horizontal (retícula 2x2, rotación ICUIXIAN 0 deg).
+    struct DetectedDisplay {
+        CGDirectDisplayID id = kCGNullDirectDisplay;
+        CGRect bounds = CGRectZero;
+        std::size_t physicalArea = 0;
+        bool external = false;
+        bool is4K = false;
+    };
+
+    uint32_t displayCount = 0;
+    if (CGGetActiveDisplayList(0, nullptr, &displayCount) != kCGErrorSuccess ||
+        displayCount < 2) {
+        outputModeError_ = "Two active displays were not detected";
+        return false;
+    }
+
+    std::vector<CGDirectDisplayID> ids(displayCount);
+    if (CGGetActiveDisplayList(displayCount, ids.data(), &displayCount) !=
+        kCGErrorSuccess) {
+        outputModeError_ = "macOS display detection failed";
+        return false;
+    }
+
+    std::vector<DetectedDisplay> external;
+    for (uint32_t i = 0; i < displayCount; ++i) {
+        const CGDirectDisplayID id = ids[i];
+        if (CGDisplayMirrorsDisplay(id) != kCGNullDirectDisplay) continue;
+        const std::size_t physicalW = CGDisplayPixelsWide(id);
+        const std::size_t physicalH = CGDisplayPixelsHigh(id);
+        DetectedDisplay display;
+        display.id = id;
+        display.bounds = CGDisplayBounds(id);
+        display.physicalArea = physicalW * physicalH;
+        display.external = CGDisplayIsBuiltin(id) == 0;
+        display.is4K = physicalW >= 3840;
+        if (display.external) external.push_back(display);
+    }
+
+    if (external.size() < 2) {
+        outputModeError_ = "Mixed wall setup requires two independent external displays";
+        return false;
+    }
+
+    std::sort(external.begin(), external.end(),
+              [](const DetectedDisplay& a, const DetectedDisplay& b) {
+                  if (a.is4K != b.is4K) return a.is4K > b.is4K;
+                  return a.physicalArea > b.physicalArea;
+              });
+    external.resize(2);
+
+    std::vector<CGDisplayModeRef> inputModes;
+    inputModes.reserve(external.size());
+    for (const auto& display : external) {
+        const CGDisplayModeRef mode = copyIcuixianInputMode(display.id);
+        if (!mode) {
+            for (const auto retainedMode : inputModes) CFRelease(retainedMode);
+            outputModeError_ = "1920x1080 @ 60 Hz mode unavailable on one of the displays";
+            return false;
+        }
+        inputModes.push_back(mode);
+    }
+
+    CGDisplayConfigRef displayConfig = nullptr;
+    CGError modeResult = CGBeginDisplayConfiguration(&displayConfig);
+    for (std::size_t i = 0;
+         modeResult == kCGErrorSuccess && i < external.size(); ++i) {
+        modeResult = CGConfigureDisplayWithDisplayMode(
+            displayConfig, external[i].id, inputModes[i], nullptr);
+    }
+    if (modeResult == kCGErrorSuccess) {
+        modeResult = CGCompleteDisplayConfiguration(
+            displayConfig, kCGConfigurePermanently);
+    } else if (displayConfig) {
+        CGCancelDisplayConfiguration(displayConfig);
+    }
+    for (const auto mode : inputModes) CFRelease(mode);
+
+    if (modeResult != kCGErrorSuccess) {
+        outputModeError_ = "macOS could not switch both ICUIXIAN inputs to 1080p60";
+        return false;
+    }
+
+    for (auto& display : external) {
+        display.bounds = CGDisplayBounds(display.id);
+        if (static_cast<int>(display.bounds.size.width) !=
+                static_cast<int>(kIcuixianInputWidth) ||
+            static_cast<int>(display.bounds.size.height) !=
+                static_cast<int>(kIcuixianInputHeight)) {
+            outputModeError_ = "Display is not exposed as a 1920x1080 desktop";
+            return false;
+        }
+    }
+
+    // Ordenar de izquierda a derecha para que Window A sea la salida más a la izquierda (Wall A = vertical).
+    std::sort(external.begin(), external.end(),
+              [](const DetectedDisplay& a, const DetectedDisplay& b) {
+                  if (a.bounds.origin.x != b.bounds.origin.x)
+                      return a.bounds.origin.x < b.bounds.origin.x;
+                  return a.bounds.origin.y < b.bounds.origin.y;
+              });
+
+    std::string settingsError;
+    ofJson cfg = SettingsStore::load(&settingsError);
+    if (!cfg.is_object()) {
+        outputModeError_ = settingsError.empty()
+            ? "settings.json is missing or invalid" : settingsError;
+        return false;
+    }
+
+    // Wall A: pantalla más a la izquierda, franjas 4x1 verticales.
+    // Wall B: pantalla más a la derecha, retícula 2x2 horizontal.
+    ofJson windows = ofJson::array();
+    windows.push_back({
+        {"x",      static_cast<int>(external[0].bounds.origin.x)},
+        {"y",      static_cast<int>(external[0].bounds.origin.y)},
+        {"width",  static_cast<int>(external[0].bounds.size.width)},
+        {"height", static_cast<int>(external[0].bounds.size.height)},
+        {"layout", "4x1"}
+    });
+    windows.push_back({
+        {"x",      static_cast<int>(external[1].bounds.origin.x)},
+        {"y",      static_cast<int>(external[1].bounds.origin.y)},
+        {"width",  static_cast<int>(external[1].bounds.size.width)},
+        {"height", static_cast<int>(external[1].bounds.size.height)},
+        {"layout", "2x2"}
+    });
+
+    cfg["outputMode"] = "dualWindow8";
+    cfg["presentationWindows"] = windows;
+    cfg["videoWallController"] = {
+        {"brand", "ICUIXIAN"},
+        {"model", "0104-XZ"},
+        {"asin", "B0DM98NVSH"},
+        {"controllers", 2},
+        {"inputWidth", kIcuixianInputWidth},
+        {"inputHeight", kIcuixianInputHeight},
+        {"refreshHz", kIcuixianRefreshHz},
+        {"wallA", {{"layout", "4x1"}, {"layoutPerController", "4x1"}, {"rotationDegrees", 90}, {"panelOrientation", "portrait"}, {"panels", 4}}},
+        {"wallB", {{"layout", "2x2"}, {"layoutPerController", "2x2"}, {"rotationDegrees", 0},  {"panelOrientation", "landscape"}, {"panels", 4}}}
+    };
+
+    if (!SettingsStore::save(cfg, &settingsError)) {
+        outputModeError_ = settingsError.empty()
+            ? "Could not write settings.json" : settingsError;
+        return false;
+    }
+
+    const auto& a = external[0].bounds;
+    const auto& b = external[1].bounds;
+    detectedOutputSummary_ =
+        "Mixed wall: A " +
+        ofToString(static_cast<int>(a.size.width)) + "x" +
+        ofToString(static_cast<int>(a.size.height)) + " @ " +
+        ofToString(static_cast<int>(a.origin.x)) + "," +
+        ofToString(static_cast<int>(a.origin.y)) +
+        " [4x1 portrait rot 90] | B " +
+        ofToString(static_cast<int>(b.size.width)) + "x" +
+        ofToString(static_cast<int>(b.size.height)) + " @ " +
+        ofToString(static_cast<int>(b.origin.x)) + "," +
+        ofToString(static_cast<int>(b.origin.y)) + " [2x2 landscape rot 0]";
+    buildWallSummaryFromSettings(cfg);
     outputModeError_.clear();
     dualWindowConfigured_ = true;
     outputRestartRequired_ = true;
@@ -407,7 +710,11 @@ bool ControlApp::detectAndSaveDualOutputs() {
 }
 
 void ControlApp::drawGlobalPanel() {
-    ImGui::BeginChild("GlobalBar", ImVec2(0.f, 92.f), true,
+    // Altura: base 92 + 20 por línea de resumen de muro cuando existe.
+    const float wallLines = (!wallASummary_.empty() ? 1.f : 0.f) +
+                            (!wallBSummary_.empty() ? 1.f : 0.f);
+    const float globalH = 92.f + wallLines * 22.f;
+    ImGui::BeginChild("GlobalBar", ImVec2(0.f, globalH), true,
                       ImGuiWindowFlags_NoScrollbar);
     ImGui::Text("PDJ CONTROL");
     ImGui::SameLine(120.f);
@@ -438,8 +745,11 @@ void ControlApp::drawGlobalPanel() {
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Configure ICUIXIAN outputs"))
+    if (ImGui::Button("Configure ICUIXIAN outputs (4V + 4V)"))
         detectAndSaveDualOutputs();
+    ImGui::SameLine();
+    if (ImGui::Button("Configure Mixed Wall (4V + 2x2H)"))
+        configureMixedWall();
     if (outputRestartRequired_) {
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(1.f, 0.68f, 0.25f, 1.f),
@@ -451,9 +761,13 @@ void ControlApp::drawGlobalPanel() {
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - 108.f);
     ImGui::TextDisabled("U: hide UI");
-    if (!detectedOutputSummary_.empty()) {
-        ImGui::TextDisabled("%s", detectedOutputSummary_.c_str());
-    }
+    // Líneas de identidad por muro — siempre visibles para que el operador confirme el enrutado.
+    if (!wallASummary_.empty())
+        ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.55f, 1.f),
+                           "%s", wallASummary_.c_str());
+    if (!wallBSummary_.empty())
+        ImGui::TextColored(ImVec4(0.40f, 0.65f, 1.00f, 1.f),
+                           "%s", wallBSummary_.c_str());
     ImGui::EndChild();
 }
 
@@ -696,8 +1010,13 @@ void ControlApp::drawComposerPanel() {
     static int selectedGenerator = 0;
     static int selectedOrganization = 0;
     static const char* generatorNames[] = {
-        "RasterPulse", "BitMatrix", "ModularGrid", "PhaseLines",
-        "VectorField", "DataLedger", "SignalTrace", "ThresholdBridge"
+        "Raster Pulse", "Bit Matrix", "Modular Grid", "Phase Lines",
+        "Vector Field", "Data Ledger", "Signal Trace", "Threshold Bridge",
+        "Pulse Field", "Bar Scan", "Granular Raster", "Orbital Rings",
+        "Full Strobe", "Divided Strobe", "Analog Noise"
+    };
+    static const char* momentNames[] = {
+        "Pulse system", "Bar scan system", "Intercalation"
     };
     static const char* organizationNames[] = {
         "Unison", "Propagation", "Counterpoint", "4 + 4"
@@ -709,6 +1028,11 @@ void ControlApp::drawComposerPanel() {
         "Appearance", "Development", "Threshold",
         "Transformation", "Dissolution"
     };
+    static const char* collectiveNames[] = {
+        "Suspension", "Codification", "Accumulation", "Propagation",
+        "Convergence", "Fragmentation", "Saturation", "Rupture",
+        "Residue"
+    };
 
     ImGui::BeginChild("ComposerPanel", ImVec2(0.f, 0.f), true);
     ImGui::Text("VISUAL COMPOSER");
@@ -717,6 +1041,33 @@ void ControlApp::drawComposerPanel() {
                                  : ImVec4(0.75f, 0.75f, 0.75f, 1.f),
                        "%s", p.enabled ? "ACTIVE" : "LEGACY VIDEO MODE");
     ImGui::Checkbox("Enabled", &p.enabled);
+    ImGui::SameLine();
+    ImGui::Checkbox("Installation program", &p.programEnabled);
+    const int activeMoment = ofClamp(
+        static_cast<int>(composer_->moment()), 0, 2);
+    ImGui::Text("Moment: %s  %.1fs%s",
+                momentNames[activeMoment], composer_->momentElapsed(),
+                composer_->takeoverActive() ? "  / GLOBAL TAKEOVER" : "");
+    ImGui::SameLine();
+    if (ImGui::Button("Next moment"))
+        composer_->forceNextMoment();
+    ImGui::SameLine();
+    if (ImGui::Button("Global takeover"))
+        composer_->forceTakeover();
+    ImGui::TextDisabled("Point-cloud occupancy  group A: %d/4  group B: %d/4",
+                        composer_->activeVideoCount(0),
+                        composer_->activeVideoCount(1));
+    const CollectiveState& collective = composer_->collectiveState();
+    const int collectiveIndex = ofClamp(
+        static_cast<int>(collective.movement), 0, 8);
+    ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.f, 1.f),
+                       "Collective: %s  phase %.2f  revision %llu",
+                       collectiveNames[collectiveIndex], collective.phase,
+                       static_cast<unsigned long long>(collective.revision));
+    ImGui::TextDisabled(
+        "activity %.2f  coherence %.2f  diversity %.2f  convergence %.2f  tension %.2f",
+        collective.activity, collective.coherence, collective.diversity,
+        collective.convergence, collective.tension);
 
     ImGui::SetNextItemWidth(190.f);
     ImGui::Combo("Organization", &selectedOrganization,
@@ -728,8 +1079,10 @@ void ControlApp::drawComposerPanel() {
 
     ImGui::SetNextItemWidth(190.f);
     ImGui::Combo("Generator", &selectedGenerator,
-                 "RasterPulse\0BitMatrix\0ModularGrid\0PhaseLines\0"
-                 "VectorField\0DataLedger\0SignalTrace\0ThresholdBridge\0");
+                 "Raster Pulse\0Bit Matrix\0Modular Grid\0Phase Lines\0"
+                 "Vector Field\0Data Ledger\0Signal Trace\0Threshold Bridge\0"
+                 "Pulse Field\0Bar Scan\0Granular Raster\0Orbital Rings\0"
+                 "Full Strobe\0Divided Strobe\0Analog Noise\0");
     ImGui::SameLine();
     if (ImGui::Button("Shared generator"))
         composer_->forceShared(ContentType::Generator, selectedGenerator);
@@ -740,10 +1093,21 @@ void ControlApp::drawComposerPanel() {
     ImGui::Separator();
     ImGui::Columns(3, "ComposerColumns", false);
     ImGui::TextDisabled("CONTENT WEIGHTS");
+    ImGui::Checkbox("Data-assisted form", &p.collectiveLogicEnabled);
+    compactSliderFloat("Data response", "##CollectiveResponse",
+                       &p.collectiveResponse, 0.f, 1.f);
+    compactSliderFloat("Decision hold", "##CollectiveHold",
+                       &p.collectiveDecisionHold, 0.2f, 6.f, "%.1f s");
+    compactSliderFloat("Movement dwell", "##CollectiveDwell",
+                       &p.collectiveMinimumDwell, 1.f, 20.f, "%.1f s");
     compactSliderFloat("Video", "##ComposerVideoW", &p.videoProbability, 0.f, 1.f);
     compactSliderFloat("Generator", "##ComposerGenW", &p.generatorProbability, 0.f, 1.f);
     compactSliderFloat("Breath", "##ComposerBreathW", &p.breathProbability, 0.f, 1.f);
     compactSliderFloat("Transition", "##ComposerTransW", &p.transitionProbability, 0.f, 1.f);
+    compactSliderFloat("Second video", "##ComposerDualVideo",
+                       &p.dualVideoProbability, 0.f, 1.f);
+    compactSliderInt("Video cap", "##ComposerVideoCap",
+                     &p.maxVideoPerGroup, 1, 2);
 
     ImGui::NextColumn();
     ImGui::TextDisabled("PROTECTED DURATIONS");
@@ -752,6 +1116,48 @@ void ControlApp::drawComposerPanel() {
     compactSliderFloat("Generator max", "##ComposerGenMax", &p.generatorMaxDuration, 3.f, 120.f, "%.0f s");
     compactSliderFloat("Breath min", "##ComposerBreathMin", &p.breathMinDuration, 0.5f, 20.f, "%.1f s");
     compactSliderFloat("Breath max", "##ComposerBreathMax", &p.breathMaxDuration, 1.f, 30.f, "%.1f s");
+    compactSliderFloat("Pulse moment", "##ComposerPulseMoment",
+                       &p.pulseMomentDuration, 4.f, 120.f, "%.0f s");
+    compactSliderFloat("Bar moment", "##ComposerBarMoment",
+                       &p.barScanMomentDuration, 4.f, 120.f, "%.0f s");
+    compactSliderFloat("Takeover min", "##ComposerTakeoverMin",
+                       &p.takeoverIntervalMin, 10.f, 300.f, "%.0f s");
+    compactSliderFloat("Takeover max", "##ComposerTakeoverMax",
+                       &p.takeoverIntervalMax, 10.f, 600.f, "%.0f s");
+    compactSliderFloat("Data event cooldown", "##CollectiveCooldown",
+                       &p.collectiveEventCooldown, 4.f, 120.f, "%.0f s");
+    ImGui::Separator();
+    ImGui::Checkbox("Noise events", &p.noiseEventEnabled);
+    compactSliderFloat("Noise interval", "##NoiseInterval",
+                       &p.noiseEventInterval, 10.f, 300.f, "%.0f s");
+    compactSliderFloat("Noise duration", "##NoiseDuration",
+                       &p.noiseEventDuration, 1.f, 20.f, "%.1f s");
+    if (ImGui::Button("Trigger noise now"))
+        composer_->forceNoiseMoment();
+    ImGui::Separator();
+    ImGui::Checkbox("Generator invert", &p.generatorInvertEnabled);
+    compactSliderFloat("Invert interval", "##InvertInterval",
+                       &p.generatorInvertInterval, 10.f, 300.f, "%.0f s");
+    compactSliderFloat("Invert duration", "##InvertDuration",
+                       &p.generatorInvertDuration, 1.f, 60.f, "%.1f s");
+    if (composer_->generatorInvertActive()) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.f, 1.f, 0.3f, 1.f), "ACTIVE");
+    }
+    if (ImGui::Button("Trigger invert now"))
+        composer_->forceGeneratorInvertMoment();
+    ImGui::Separator();
+    ImGui::Checkbox("Polarity invert", &p.polarityInvertEnabled);
+    compactSliderFloat("Polarity interval", "##PolarityInterval",
+                       &p.polarityInvertInterval, 10.f, 600.f, "%.0f s");
+    compactSliderFloat("Polarity duration", "##PolarityDuration",
+                       &p.polarityInvertDuration, 1.f, 60.f, "%.1f s");
+    if (composer_->polarityInvertActive()) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.f, 1.f), "ACTIVE");
+    }
+    if (ImGui::Button("Trigger polarity now"))
+        composer_->forcePolarityInvertMoment();
 
     ImGui::NextColumn();
     ImGui::TextDisabled("RHYTHM / IMAGE");
@@ -763,14 +1169,43 @@ void ControlApp::drawComposerPanel() {
                            &channel->generatorParams().intensity, 0.f, 1.f);
         compactSliderFloat("Density", ("##GenDensity" + ofToString(channel->getIdx())).c_str(),
                            &channel->generatorParams().density, 0.f, 1.f);
+        compactSliderFloat("Glow", ("##GenGlow" + ofToString(channel->getIdx())).c_str(),
+                           &channel->generatorParams().glowGain, 0.f, 1.5f);
+        compactSliderFloat("Glow radius", ("##GenGlowRadius" + ofToString(channel->getIdx())).c_str(),
+                           &channel->generatorParams().glowRadius, 0.25f, 4.f);
+        compactSliderFloat("Feedback decay", ("##GenFeedback" + ofToString(channel->getIdx())).c_str(),
+                           &channel->generatorParams().feedbackDecay, 0.f, 0.94f);
         break;
     }
     if (!channels_.empty() && channels_[0]) {
-        const GeneratorRuntimeParams source = channels_[0]->generatorParams();
+        GeneratorRuntimeParams& editable = channels_[0]->generatorParams();
+        // Solo niveles de gris: la instalación no admite crominancia, así que la
+        // paleta se expone como dos valores de exposición, no como selectores de color.
+        int primary = editable.cyan.r;
+        int secondary = editable.red.r;
+        if (compactSliderInt("Primary level", "##GenPrimaryLevel", &primary,
+                             0, 255))
+            editable.cyan = ofColor(static_cast<unsigned char>(primary));
+        if (compactSliderInt("Secondary level", "##GenSecondaryLevel",
+                             &secondary, 0, 255))
+            editable.red = ofColor(static_cast<unsigned char>(secondary));
+        bool inverted = channels_[0]->invertPolarity();
+        if (ImGui::Checkbox("Invert polarity (black on white)", &inverted)) {
+            for (Channel* channel : channels_) {
+                if (channel) channel->setInvertPolarity(inverted);
+            }
+        }
+        const GeneratorRuntimeParams source = editable;
         for (std::size_t i = 1; i < channels_.size(); ++i) {
             if (!channels_[i]) continue;
             channels_[i]->generatorParams().intensity = source.intensity;
             channels_[i]->generatorParams().density = source.density;
+            channels_[i]->generatorParams().glowGain = source.glowGain;
+            channels_[i]->generatorParams().glowRadius = source.glowRadius;
+            channels_[i]->generatorParams().feedbackDecay =
+                source.feedbackDecay;
+            channels_[i]->generatorParams().cyan = source.cyan;
+            channels_[i]->generatorParams().red = source.red;
         }
     }
     ImGui::Columns(1);
@@ -782,7 +1217,7 @@ void ControlApp::drawComposerPanel() {
         const int stage = ofClamp(static_cast<int>(state.stage), 0, 4);
         const int organization =
             ofClamp(static_cast<int>(state.organization), 0, 3);
-        const int generator = ofClamp(state.generator, 0, 7);
+        const int generator = ofClamp(state.generator, 0, 11);
         ImGui::Text("CH %d  %s  %s  %s  %.0f%%",
                     i, contentNames[content],
                     content == static_cast<int>(ContentType::Video)
@@ -924,6 +1359,31 @@ void ControlApp::drawChannelPanel(int i) {
     float spd = ch->getBaseSpeed();
     if (compactSliderFloat("Speed", "##Speed", &spd, 0.1f, 4.f))
         ch->setSpeed(spd);
+
+    VideoPointCloudSettings& vpc = ch->videoPointCloudSettings();
+    sectionTitle("VIDEO POINT CLOUD");
+    ImGui::Checkbox("Enabled##Vpc", &vpc.enabled);
+    const char* vpcPresets[] = {
+        "Luminance Relief", "Player Extraction", "Hybrid Stadium Field"};
+    int vpcPreset = ofClamp(vpc.preset, 0, 2);
+    ImGui::SetNextItemWidth(220.f);
+    if (ImGui::Combo("Preset##Vpc", &vpcPreset, vpcPresets, 3))
+        vpc.applyPreset(vpcPreset);
+    ImGui::SameLine();
+    if (ImGui::Button("Reset feedback##Vpc"))
+        ch->resetVideoPointCloudFeedback();
+    compactSliderInt("Grid W", "##VpcGridW", &vpc.gridWidth, 64, 384);
+    compactSliderInt("Grid H", "##VpcGridH", &vpc.gridHeight, 64, 384);
+    compactSliderFloat("Depth", "##VpcDepth", &vpc.depthScale, 0.f, 3.f);
+    compactSliderFloat("Point", "##VpcPoint", &vpc.pointSize, 0.5f, 6.f);
+    compactSliderFloat("Luma floor", "##VpcLuma", &vpc.luminanceFloor, 0.f, 0.5f);
+    compactSliderFloat("Color gain", "##VpcColor", &vpc.colorGain, 0.f, 3.f);
+    compactSliderFloat("Yaw", "##VpcYaw", &vpc.cameraYaw, -90.f, 90.f);
+    compactSliderFloat("Distance", "##VpcDistance", &vpc.cameraDistance, 0.5f, 5.f);
+    ImGui::Checkbox("Feedback##Vpc", &vpc.feedbackEnabled);
+    if (vpc.feedbackEnabled)
+        compactSliderFloat("Decay", "##VpcDecay", &vpc.feedbackDecay,
+                           0.f, 0.995f);
 
     CVParams& cvp = ch->getCVPipeline().params();
     EventDetector::Params& ep = ch->getDetector().params();

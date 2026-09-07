@@ -46,7 +46,8 @@ void VideoDirector::update(float globalSpeed) {
     wasEnabled_ = params_.enabled;
     if (!params_.enabled && sharedState_ == SharedState::Idle) return;
 
-    if (params_.enabled && sharedState_ == SharedState::Idle && now >= nextSharedAt_) {
+    if (params_.enabled && params_.sharedEventsEnabled &&
+        sharedState_ == SharedState::Idle && now >= nextSharedAt_) {
         beginShared(now);
     } else if (sharedState_ == SharedState::Loading) {
         bool allReady = true;
@@ -80,7 +81,7 @@ void VideoDirector::requestNext(int channelIdx) {
 }
 
 void VideoDirector::triggerSharedNow() {
-    if (!pool_) return;
+    if (!pool_ || !params_.sharedEventsEnabled) return;
     beginShared(ofGetElapsedTimef());
 }
 
@@ -166,23 +167,53 @@ void VideoDirector::scheduleNextShared(float now) {
 }
 
 void VideoDirector::beginShared(float now) {
-    const std::string path = pool_ ? pool_->getSharedClip() : "";
-    if (path.empty()) {
+    // Obtiene un clip por grupo de pool para que los canales verticales (0..kGroupThreshold-1)
+    // reciban siempre clips verticales y los horizontales reciban clips horizontales.
+    const int threshold = ClipPool::kGroupThreshold;
+    const std::string pathA = pool_ ? pool_->getSharedClipForGroup(0) : "";
+    const std::string pathB = pool_ ? pool_->getSharedClipForGroup(1) : "";
+
+    if (pathA.empty() && pathB.empty()) {
         scheduleNextShared(now);
         return;
     }
 
-    VideoPlan common = makePlan(path, true);
+    // Cae al clip vertical para canales horizontales cuando no hay pool
+    // horizontal cargado.
+    const std::string effectivePathB = pathB.empty() ? pathA : pathB;
+
     ready_.fill({});
-    for (int i = 0; i < channelCount_; ++i) {
-        common.revision = ++nextRevision_[i];
-        plans_[i] = common;
-        waitingForPlan_[i] = false;
-        pool_->setActiveClip(i, path);
+
+    // Grupo A — canales verticales.
+    if (!pathA.empty()) {
+        VideoPlan planA = makePlan(pathA, true);
+        const int groupAEnd = std::min(threshold, channelCount_);
+        for (int i = 0; i < groupAEnd; ++i) {
+            planA.revision = ++nextRevision_[i];
+            plans_[i] = planA;
+            waitingForPlan_[i] = false;
+            pool_->setActiveClip(i, pathA);
+        }
+        ofLogNotice("VideoDirector") << "Shared event group A: "
+            << ofFilePath::getFileName(pathA)
+            << " (" << planTypeName(planA.type) << ")";
     }
+
+    // Grupo B — canales horizontales (solo cuando el modo de 8 canales está activo).
+    if (channelCount_ > threshold && !effectivePathB.empty()) {
+        VideoPlan planB = makePlan(effectivePathB, true);
+        for (int i = threshold; i < channelCount_; ++i) {
+            planB.revision = ++nextRevision_[i];
+            plans_[i] = planB;
+            waitingForPlan_[i] = false;
+            pool_->setActiveClip(i, effectivePathB);
+        }
+        ofLogNotice("VideoDirector") << "Shared event group B: "
+            << ofFilePath::getFileName(effectivePathB)
+            << " (" << planTypeName(planB.type) << ")";
+    }
+
     sharedState_ = SharedState::Loading;
-    ofLogNotice("VideoDirector") << "Shared event: "
-        << ofFilePath::getFileName(path) << " (" << planTypeName(common.type) << ")";
 }
 
 void VideoDirector::finishShared(float now) {

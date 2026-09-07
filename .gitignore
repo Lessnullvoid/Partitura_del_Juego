@@ -10,7 +10,14 @@
 obj/
 bin/Partitura_del_Juego.app
 bin/Partitura_del_Juego.app.dSYM
+bin/*_debug.app
+bin/*_debug.app.dSYM
 dist/
+volumetric/obj/
+volumetric/bin/*.app
+volumetric/bin/*.app.dSYM
+volumetric/bin/volumetric
+volumetric/tests/test_pdjv
 
 # Video clips (large binary files — store separately)
 bin/data/cortos/
@@ -29,3 +36,12 @@ bin/data/performance_reports/
 archives/**/*.app/
 archives/**/*.app.dSYM/
 archives/**/imgui.ini
+
+# Analyzer local environments and source-derived validation output
+analyzer/.venv/
+analyzer/output/
+analyzer/models/*.pt
+volumetric/bin/data/real_*.pdjv/
+analyzer/**/__pycache__/
+analyzer/**/*.pyc
+**/.pytest_cache/

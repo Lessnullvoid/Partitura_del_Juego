@@ -1,28 +1,29 @@
 #include "GlobalDirector.h"
 
-// Clear color palette — vibrant, high-contrast colors so the effect is unmissable
+// Paleta de clear — instalación monocroma, así que el efecto opera por
+// escalones de exposición, no por tono.
 static const ofColor kClearPalette[] = {
-    ofColor(220,  20,  20),   // vivid red
-    ofColor(  0,   0,   0),   // black
-    ofColor(255, 255, 255),   // white flash
-    ofColor(  0,   0,   0),   // black
-    ofColor(200,  15,  15),   // deep crimson
-    ofColor(  0,   0,   0),   // black
+    ofColor(255, 255, 255),   // destello blanco
+    ofColor(  0,   0,   0),   // negro
+    ofColor(168, 168, 168),   // media exposición
+    ofColor(  0,   0,   0),   // negro
+    ofColor(255, 255, 255),   // destello blanco
+    ofColor(  0,   0,   0),   // negro
 };
 static constexpr int kNumClearColors = 6;
 
 // ---------------------------------------------------------------------------
 void GlobalDirector::setup() {
-    // Intentionally empty: ofGetElapsedTimef() is not yet reliable when main()
-    // calls setup() before ofRunMainLoop().  Timing is initialized on the first
-    // update() call instead, once the OF timer is properly running.
+    // Vacío a propósito: ofGetElapsedTimef() aún no es fiable cuando main()
+    // llama a setup() antes de ofRunMainLoop().  El tiempo se inicializa en la
+    // primera llamada a update(), cuando el temporizador OF ya está en marcha.
 }
 
 // ---------------------------------------------------------------------------
 void GlobalDirector::update() {
     double now = ofGetElapsedTimef();
 
-    // First call: initialize timing after the OF timer is stable.
+    // Primera llamada: inicializar el tiempo cuando el temporizador OF es estable.
     if (lastTime_ < 0.0) {
         lastTime_   = now;
         tNextFast_  = now + ofRandom(4.f,  8.f);
@@ -32,10 +33,10 @@ void GlobalDirector::update() {
     }
 
     double dt = now - lastTime_;
-    if (dt < 0.0005) return;   // skip duplicate calls within same rendering frame
+    if (dt < 0.0005) return;   // omitir llamadas duplicadas en el mismo fotograma de render
     lastTime_ = now;
 
-    // ---- Auto triggers ----
+    // ---- Auto-disparos ----
     if (p_.autoSlow && tPhase_ == TemporalPhase::Idle && now >= tNextSlow_)
         triggerSlow();
 
@@ -45,7 +46,7 @@ void GlobalDirector::update() {
     if (p_.autoClear && cPhase_ == ClearPhase::Idle && now >= cNextClear_)
         triggerClear();
 
-    // ---- Temporal state machine ----
+    // ---- Máquina de estados temporal ----
     switch (tPhase_) {
 
         case TemporalPhase::Idle:
@@ -77,7 +78,7 @@ void GlobalDirector::update() {
                 tPhase_      = TemporalPhase::Idle;
                 tTimer_      = 0.0;
                 tNextSlow_   = now + ofRandom(p_.slowIntervalMin, p_.slowIntervalMax);
-                // Do not auto-reschedule fast if it already has a future time
+                // No reprogramar fast automáticamente si ya tiene un tiempo futuro
                 if (tNextFast_ < now)
                     tNextFast_ = now + ofRandom(p_.fastIntervalMin, p_.fastIntervalMax);
             }
@@ -115,7 +116,7 @@ void GlobalDirector::update() {
             break;
     }
 
-    // ---- Screen-clear state machine ----
+    // ---- Máquina de estados de clear de pantalla ----
     switch (cPhase_) {
 
         case ClearPhase::Idle:
@@ -192,7 +193,7 @@ void GlobalDirector::triggerFast() {
 void GlobalDirector::triggerClear(ofColor color) {
     if (cPhase_ != ClearPhase::Idle) return;
 
-    // alpha == 0 is the sentinel for "no color specified — cycle the palette"
+    // alpha == 0 es el centinela de "sin color indicado — recorrer la paleta"
     if (color.a == 0) {
         cColor_ = kClearPalette[cColorIdx_ % kNumClearColors];
         cColorIdx_++;

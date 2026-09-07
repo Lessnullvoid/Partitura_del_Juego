@@ -1,17 +1,15 @@
-/*
-  Scene-specific cinematic voices for pdj_datamatics.scd.
-  This file is loaded automatically by the main engine.
-*/
+// Voces cinematográficas por escena para pdj_datamatics.scd.
+// Este archivo lo carga automáticamente el motor principal.
 
 ~installModeVoices = {
 	var addVoice;
 
 	addVoice = { |name, voiceFunc|
-		SynthDef(name, { |out = 0, ampBus, panBus, tensionBus, spectralBus,
+		SynthDef(name, { |out = 0, ampBus, gainBus, tensionBus, spectralBus,
 			sceneAmp = 0.7, color = 0.2, variant = 0, evolution = 0,
 			lifeGate = 1, master = 0.14|
 			var activity = In.kr(ampBus, 1).lag(3);
-			var pan = In.kr(panBus, 1).lag(2.5);
+			var gains    = In.kr(gainBus, ~numSpeakers).lag(1.2).max(0);
 			var tension = In.kr(tensionBus, 1).lagud(0.4, 8).clip(0, 1);
 			var evo = evolution.lag(5).clip(0, 1);
 			var anchor = In.kr(spectralBus, 1).lag(4) * evo.linexp(0, 1, 0.58, 2.2);
@@ -23,7 +21,7 @@
 			var sig = voiceFunc.value(base, anchor, tension, activity, color, variant, evo);
 			var ceiling = evo.linexp(0, 1, 3500, 17000) * tension.linexp(0, 1, 0.8, 1.15);
 			sig = LeakDC.ar(LPF.ar(sig, ceiling.clip(1800, 18000)));
-			Out.ar(out, Pan2.ar(sig * presence * life * master, pan * 0.72));
+			Out.ar(out, (sig * presence * life * master ! ~numSpeakers) * gains);
 		}).add;
 	};
 
@@ -132,12 +130,13 @@
 			Env.perc(0.002, 0.75 + (weight * 0.35), 1, -7),
 			doneAction: 2
 		);
+		var pos   = pan.linlin(-1, 1, 0, 2);
 		var pitch = XLine.kr(72 + (weight * 24), 29, 0.19);
-		var body = SinOsc.ar(pitch, 0, 0.72)
+		var body  = SinOsc.ar(pitch, 0, 0.72)
 			+ (SinOsc.ar(pitch * 1.006, 0, 0.24));
-		var edge = BPF.ar(PinkNoise.ar, 950 + (weight * 850), 0.18)
+		var edge  = BPF.ar(PinkNoise.ar, 950 + (weight * 850), 0.18)
 			* EnvGen.ar(Env.perc(0.001, 0.035)) * 0.10;
-		Out.ar(out, Pan2.ar((body * env + edge) * amp, pan));
+		Out.ar(out, PanAz.ar(~numSpeakers, (body * env + edge) * amp, pos, 1, 0.5));
 	}).add;
 
 	~modeSynthNames = [

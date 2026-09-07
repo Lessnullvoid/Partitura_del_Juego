@@ -1,0 +1,20 @@
+{
+    "osc": { "host": "localhost", "port": 9001, "listenPort": 9002 },
+    "targetFPS": 30,
+    "outputMode": "dualWindow8",
+    "qualityTier": "Preview",
+    "defaultGenerator": "WireframeShell",
+    "cameraMode": "portraitBust",
+    "composerEnabled": false,
+    "pdjv": {
+        "primary": "golden_v0.pdjv",
+        "secondary": "golden_v1.pdjv"
+    },
+    "contentMode": "SharedView",
+    "presentationWindows": [
+        { "x": 0, "y": 0, "width": 1920, "height": 1080 },
+        { "x": 1920, "y": 0, "width": 1920, "height": 1080 }
+    ],
+    "singleWindow": { "x": 40, "y": 40, "width": 1920, "height": 1080 },
+    "controlWindow": { "x": 40, "y": 40, "width": 720, "height": 640 }
+}

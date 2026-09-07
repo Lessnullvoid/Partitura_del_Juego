@@ -12,6 +12,7 @@ enum class VideoPlanType {
 
 struct VideoDirectorParams {
     bool  enabled = true;
+    bool  sharedEventsEnabled = true;
 
     float shortWeight = 0.50f;
     float longWeight  = 0.30f;

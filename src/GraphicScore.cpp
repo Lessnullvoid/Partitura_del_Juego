@@ -1,11 +1,11 @@
 #include "GraphicScore.h"
 
-// ---- Color palette for mark cycling ------------------------------------------
-// Order: white → red → electric blue → repeat
+// ---- Paleta de marcas ---------------------------------------------------------
+// Instalación monocroma: las marcas solo recorren niveles de gris.
 static const ofColor kMarkColors[] = {
-    ofColor(255, 255, 255),   // white
-    ofColor(220, 30,  30),    // red
-    ofColor(30,  140, 255),   // electric blue
+    ofColor(255, 255, 255),
+    ofColor(186, 186, 186),
+    ofColor(124, 124, 124),
 };
 static constexpr int kNumColors = 3;
 
@@ -17,7 +17,7 @@ static constexpr int kNumColors = 3;
     return kMarkColors[0];
 }
 
-// ---- Cover-crop layout -------------------------------------------------------
+// ---- Disposición cover-crop ---------------------------------------------------
 GraphicScore::CoverLayout GraphicScore::coverLayout() const {
     if (!curRawTex_ || !curRawTex_->isAllocated())
         return {0, 0, (float)w_, (float)h_, 1.f};
@@ -29,7 +29,7 @@ GraphicScore::CoverLayout GraphicScore::coverLayout() const {
     return { (fw - dw) * 0.5f, (fh - dh) * 0.5f, dw, dh, s };
 }
 
-// ---- Setup -------------------------------------------------------------------
+// ---- Configuración ------------------------------------------------------------
 void GraphicScore::setup(int w, int h) {
     w_ = w;
     h_ = h;
@@ -51,18 +51,22 @@ void GraphicScore::setup(int w, int h) {
     if (!thermalShader_.isLoaded())
         ofLogError("GraphicScore") << "thermal shader failed to load";
 
-    // Small font for dense binary rows
+    monoShader_.load("shaders/bw.vert", "shaders/mono.frag");
+    if (!monoShader_.isLoaded())
+        ofLogError("GraphicScore") << "mono shader failed to load";
+
+    // Fuente pequeña para filas binarias densas
     monoFont_.load(OF_TTF_MONO, 10, true, true);
-    // Larger font for blob IDs, coordinates, numbers
+    // Fuente mayor para IDs de blob, coordenadas y números
     labelFont_.load(OF_TTF_MONO, 18, true, true);
 
     buildSequence();
     lastTime_ = ofGetElapsedTimef();
 }
 
-// ---- Sequence ----------------------------------------------------------------
+// ---- Secuencia ----------------------------------------------------------------
 void GraphicScore::buildSequence() {
-    // BwClean after every mode gives breathing room and visual contrast.
+    // BwClean tras cada modo da respiro y contraste visual.
     sequence_ = {
         ScoreMode::BwClean,
         ScoreMode::ScanLine,
@@ -107,24 +111,24 @@ void GraphicScore::buildSequence() {
     modeTimer_    = 0.0;
 }
 
-// ---- Events ------------------------------------------------------------------
+// ---- Eventos ------------------------------------------------------------------
 void GraphicScore::onCollision() {
     if (preFlashMode_ >= 0) return;
-    if (director_ == ScoreMode::SlitScan) return;   // keep superposition uninterrupted
+    if (director_ == ScoreMode::SlitScan) return;   // no interrumpir la superposición
     preFlashMode_ = (int)director_;
     flashTimer_   = 0.0;
 }
 
 void GraphicScore::onClipChange() {
-    if (director_ == ScoreMode::SlitScan) return;   // keep superposition uninterrupted
+    if (director_ == ScoreMode::SlitScan) return;   // no interrumpir la superposición
     strobeAlpha_ = 255.f;
-    // Alternate between white and red for variety
+    // Alterna entre una exposición completa y una a mitad
     strobeColor_ = (ofRandom(1.f) > 0.5f)
                    ? ofColor(255, 255, 255)
-                   : ofColor(220, 25, 25);
+                   : ofColor(132, 132, 132);
 }
 
-// ---- Director ----------------------------------------------------------------
+// ---- Director -----------------------------------------------------------------
 void GraphicScore::advanceDirector(double dt) {
     if (preFlashMode_ >= 0) {
         flashTimer_ += dt;
@@ -149,15 +153,15 @@ void GraphicScore::advanceDirector(double dt) {
         seqIdx_       = (seqIdx_ + 1) % (int)sequence_.size();
         director_     = sequence_[seqIdx_];
         modeDuration_ = ofRandom(params_.minModeDuration, params_.maxModeDuration);
-        // Cycle mark color on every mode transition
+        // Cicla el color de marca en cada transición de modo
         params_.markColor = nextMarkColor(params_.markColor);
 
         if (director_ == ScoreMode::SlitScan) {
-            // Guarantee enough time to fill all layers and display the result.
-            // Minimum = time to capture kSlitLayers snapshots + 12 s display buffer.
+            // Garantiza tiempo suficiente para llenar todas las capas y mostrar el resultado.
+            // Mínimo = tiempo de capturar kSlitLayers instantáneas + 12 s de buffer de visualización.
             float fillTime = (float)(kSlitLayers * std::max(1, params_.slitInterval)) / 30.0f;
             modeDuration_ = std::max(modeDuration_, (double)(fillTime + 12.0f));
-            // Reset both buffers so the ribbon + superposition always build from scratch.
+            // Reinicia ambos buffers para que la cinta + superposición se construyan desde cero.
             slitLayersFilled_ = 0;
             slitLayerWrite_   = 0;
             slitFrameCount_   = 0;
@@ -171,7 +175,7 @@ void GraphicScore::advanceDirector(double dt) {
     }
 }
 
-// ---- Update ------------------------------------------------------------------
+// ---- Update -------------------------------------------------------------------
 void GraphicScore::update(const ofTexture& bwTex, const ofTexture& rawTex, CVPipeline& cv) {
     double now = ofGetElapsedTimef();
     double dt  = now - lastTime_;
@@ -188,7 +192,7 @@ void GraphicScore::update(const ofTexture& bwTex, const ofTexture& rawTex, CVPip
 
     ScoreMode active = (preFlashMode_ >= 0) ? ScoreMode::Flash : director_;
 
-    // Slit-scan must update its own ring buffer BEFORE the score FBO opens
+    // El slit-scan debe actualizar su buffer circular ANTES de abrir el FBO de la partitura
     if (active == ScoreMode::SlitScan)
         updateSlitFbo(cv);
 
@@ -208,7 +212,7 @@ void GraphicScore::update(const ofTexture& bwTex, const ofTexture& rawTex, CVPip
     } else {
         renderBase(bwTex);
         switch (active) {
-            case ScoreMode::BwClean:      /* base only */         break;
+            case ScoreMode::BwClean:      /* solo base */         break;
             case ScoreMode::ScanLine:     renderScanLine(cv);     break;
             case ScoreMode::BBoxTracker:  renderBBoxTracker(cv);  break;
             case ScoreMode::BinaryText:   renderBinaryText(cv);   break;
@@ -221,10 +225,10 @@ void GraphicScore::update(const ofTexture& bwTex, const ofTexture& rawTex, CVPip
         }
     }
 
-    // Persistent data HUD — always drawn on top of every mode
+    // HUD de datos persistente — siempre dibujado encima de todos los modos
     renderDataHUD(cv.getData());
 
-    // Clip-change strobe: fades out fast (~0.25 s) over whatever is showing
+    // Estroboscopio de cambio de clip: se desvanece rápido (~0.25 s) sobre lo que se ve
     if (strobeAlpha_ > 0.f) {
         ofSetColor(strobeColor_.r, strobeColor_.g, strobeColor_.b, (int)strobeAlpha_);
         ofDrawRectangle(0, 0, (float)w_, (float)h_);
@@ -253,7 +257,7 @@ void GraphicScore::updateExternal(const ofTexture* texture, float opacity) {
     fbo_.end();
 }
 
-// ---- renderBase --------------------------------------------------------------
+// ---- renderBase ---------------------------------------------------------------
 void GraphicScore::renderBase(const ofTexture& videoTex) {
     if (!videoTex.isAllocated()) return;
 
@@ -276,7 +280,7 @@ void GraphicScore::renderBase(const ofTexture& videoTex) {
     }
 }
 
-// ---- ScanLine ----------------------------------------------------------------
+// ---- ScanLine -----------------------------------------------------------------
 void GraphicScore::renderScanLine(CVPipeline& cv) {
     float energy = cv.getData().motionEnergy;
     int   step   = params_.scanStep;
@@ -305,7 +309,7 @@ void GraphicScore::renderScanLine(CVPipeline& cv) {
     ofPopStyle();
 }
 
-// ---- BBoxTracker -------------------------------------------------------------
+// ---- BBoxTracker --------------------------------------------------------------
 void GraphicScore::renderBBoxTracker(CVPipeline& cv) {
     glm::vec2 scale = cv.getAnalysisScale();
     ofxCv::ContourFinder& finder = cv.getContour();
@@ -328,7 +332,7 @@ void GraphicScore::renderBBoxTracker(CVPipeline& cv) {
 
         ofDrawRectangle(rx, ry, rw, rh);
 
-        // Larger corner ticks
+        // Marcas de esquina más grandes
         float tk = std::min(rw, rh) * 0.18f;
         ofSetLineWidth(3.f);
         ofDrawLine(rx,      ry,      rx + tk, ry);
@@ -341,7 +345,7 @@ void GraphicScore::renderBBoxTracker(CVPipeline& cv) {
         ofDrawLine(rx + rw, ry + rh, rx + rw,        ry + rh - tk);
         ofSetLineWidth(1.5f);
 
-        // Large blob ID label
+        // Etiqueta grande del ID de blob
         unsigned int label = finder.getLabel(i);
         float        area  = (float)finder.getContourArea(i);
         std::string  info  = ofToString(label) + "  " + ofToString((int)(area / 100)) + "e2";
@@ -352,7 +356,7 @@ void GraphicScore::renderBBoxTracker(CVPipeline& cv) {
         else
             ofDrawBitmapString(info, rx + 3, ry - 6);
 
-        // Velocity arrow
+        // Flecha de velocidad
         cv::Point2f cen = finder.getCentroid(i);
         cv::Vec2f   vel = finder.getVelocity(i);
         float cx2 = cen.x * scale.x;
@@ -366,7 +370,7 @@ void GraphicScore::renderBBoxTracker(CVPipeline& cv) {
         ofSetColor(c.r, c.g, c.b, (int)(params_.markOpacity * 255.f));
     }
 
-    // Ball indicator
+    // Indicador de balón
     const EventData& ev = cv.getData().events;
     if (ev.ballDetected) {
         ofSetColor(c.r, c.g, c.b, 255);
@@ -383,7 +387,7 @@ void GraphicScore::renderBBoxTracker(CVPipeline& cv) {
     ofPopStyle();
 }
 
-// ---- BinaryText --------------------------------------------------------------
+// ---- BinaryText ---------------------------------------------------------------
 void GraphicScore::renderBinaryText(CVPipeline& cv) {
     const CVData& data = cv.getData();
     int n = (int)data.blobs.size();
@@ -392,7 +396,7 @@ void GraphicScore::renderBinaryText(CVPipeline& cv) {
     ofPushStyle();
     ofSetColor(c.r, c.g, c.b, (int)(params_.markOpacity * 220.f));
 
-    // Header line
+    // Línea de cabecera
     std::string header = toBinary8(ofGetFrameNum() & 0xFF) + "  N=" + toBinary8(n);
     if (labelFont_.isLoaded())
         labelFont_.drawString(header, 8, 28);
@@ -417,7 +421,7 @@ void GraphicScore::renderBinaryText(CVPipeline& cv) {
             ofDrawBitmapString(line, 8, py);
     }
 
-    // Crowd density bar
+    // Barra de densidad de crowd
     float crowd = data.events.crowdDensity;
     std::string crowdBin = toBinary8((int)(crowd * 255.f));
     float bary = (float)h_ - 40.f;
@@ -431,7 +435,7 @@ void GraphicScore::renderBinaryText(CVPipeline& cv) {
     ofPopStyle();
 }
 
-// ---- Waveform ----------------------------------------------------------------
+// ---- Waveform -----------------------------------------------------------------
 void GraphicScore::renderWaveform() {
     if (energyHistory_.empty()) return;
 
@@ -459,7 +463,7 @@ void GraphicScore::renderWaveform() {
     ofPopStyle();
 }
 
-// ---- GridData ----------------------------------------------------------------
+// ---- GridData -----------------------------------------------------------------
 void GraphicScore::renderGridData(CVPipeline& cv) {
     int cols = params_.gridCols;
     int rows = params_.gridRows;
@@ -500,7 +504,7 @@ void GraphicScore::renderGridData(CVPipeline& cv) {
         ofDrawLine(cx2, cy2 - 16, cx2, cy2 + 16);
         ofDrawCircle(cx2, cy2, 4.f);
 
-        // Large coordinate readout
+        // Lectura grande de coordenadas
         std::string pos = ofToString((int)cx2) + "," + ofToString((int)cy2);
         ofSetLineWidth(1.f);
         if (labelFont_.isLoaded())
@@ -513,7 +517,7 @@ void GraphicScore::renderGridData(CVPipeline& cv) {
     ofPopStyle();
 }
 
-// ---- Barcode -----------------------------------------------------------------
+// ---- Barcode ------------------------------------------------------------------
 void GraphicScore::renderBarcode(CVPipeline& cv) {
     const cv::Mat& fgMask = cv.getFgMask();
     if (fgMask.empty()) return;
@@ -548,21 +552,21 @@ void GraphicScore::renderBarcode(CVPipeline& cv) {
     ofPopStyle();
 }
 
-// ---- VideoNormal -------------------------------------------------------------
+// ---- VideoNormal --------------------------------------------------------------
 void GraphicScore::renderVideoNormal() {
     if (!curRawTex_ || !curRawTex_->isAllocated()) return;
     CoverLayout cl = coverLayout();
     curRawTex_->draw(cl.ox, cl.oy, cl.dw, cl.dh);
 }
 
-// ---- VideoSquares ------------------------------------------------------------
+// ---- VideoSquares -------------------------------------------------------------
 void GraphicScore::renderVideoSquares(CVPipeline& cv) {
     if (!curRawTex_ || !curRawTex_->isAllocated()) return;
 
     CoverLayout cl = coverLayout();
-    // Source pixel size matching one display pixel
+    // Tamaño de píxel de origen que corresponde a un píxel de visualización
     float sqDisplay = params_.videoSquareSize;
-    float sqSource  = sqDisplay / cl.scale;   // source pixels that map to sqDisplay px
+    float sqSource  = sqDisplay / cl.scale;   // píxeles de origen que corresponden a sqDisplay px
 
     float vw = (float)curRawTex_->getWidth();
     float vh = (float)curRawTex_->getHeight();
@@ -577,21 +581,21 @@ void GraphicScore::renderVideoSquares(CVPipeline& cv) {
 
     for (int i = 0; i < n && i < params_.videoSquareCount; i++) {
         cv::Point2f cen = finder.getCentroid(i);
-        float cx = cen.x * scale.x;  // display-space centroid
+        float cx = cen.x * scale.x;  // centroide en espacio de visualización
         float cy = cen.y * scale.y;
 
-        // Destination rect in FBO space
+        // Rectángulo destino en espacio FBO
         float dx = ofClamp(cx - sqDisplay * 0.5f, 0.f, (float)w_ - sqDisplay);
         float dy = ofClamp(cy - sqDisplay * 0.5f, 0.f, (float)h_ - sqDisplay);
 
-        // Map display position back to raw texture pixel space
+        // Mapea la posición de visualización de vuelta al espacio de píxeles de la textura original
         float srcX = ofClamp((dx - cl.ox) / cl.scale, 0.f, vw - sqSource);
         float srcY = ofClamp((dy - cl.oy) / cl.scale, 0.f, vh - sqSource);
 
         curRawTex_->drawSubsection(dx, dy, sqDisplay, sqDisplay,
                                     srcX, srcY, sqSource, sqSource);
 
-        // Corner-only border in mark color
+        // Borde solo en las esquinas, en color de marca
         ofNoFill();
         ofSetColor(c.r, c.g, c.b, (int)(params_.markOpacity * 220.f));
         ofSetLineWidth(2.f);
@@ -605,7 +609,7 @@ void GraphicScore::renderVideoSquares(CVPipeline& cv) {
         ofDrawLine(dx + sqDisplay, dy + sqDisplay, dx + sqDisplay - tk, dy + sqDisplay);
         ofDrawLine(dx + sqDisplay, dy + sqDisplay, dx + sqDisplay,   dy + sqDisplay - tk);
 
-        // Blob ID in large font
+        // ID de blob en fuente grande
         ofSetColor(c.r, c.g, c.b, 255);
         unsigned int lbl = finder.getLabel(i);
         std::string  tag = ofToString(lbl);
@@ -619,28 +623,28 @@ void GraphicScore::renderVideoSquares(CVPipeline& cv) {
 }
 
 // ---- VideoNumbers ------------------------------------------------------------
-// Draw the video as a grid of digits 0-9 whose brightness matches each cell.
-// Black background — no B&W base beneath.
+// Dibuja el vídeo como una cuadrícula de dígitos 0-9 cuyo brillo coincide con cada celda.
+// Fondo negro — sin base B&W debajo.
 void GraphicScore::renderVideoNumbers(CVPipeline& cv) {
     const cv::Mat& gray = cv.getGrayMat();
     if (gray.empty()) return;
 
-    glm::vec2 aScale = cv.getAnalysisScale();  // (4,4) install, (1,1) test
+    glm::vec2 aScale = cv.getAnalysisScale();  // (4,4) instalación, (1,1) test
 
-    // Fixed grid: 36 columns × 64 rows across the display FBO
+    // Rejilla fija: 36 columnas × 64 filas a lo largo del FBO de visualización
     const int nCols = 36;
     const int nRows = 64;
     float cellW = (float)w_ / nCols;
     float cellH = (float)h_ / nRows;
 
-    // monoFont_ was loaded at size 10; a single char is roughly 6×11 px.
+    // monoFont_ se cargó a tamaño 10; un carácter mide unos 6×11 px.
     const float kCharW = 6.0f;
     const float kCharH = 11.0f;
     float fs = std::min(cellW / kCharW, cellH / kCharH);
 
     ofColor c = params_.markColor;
 
-    // Single matrix transform for the whole grid
+    // Una sola transformación de matriz para toda la rejilla
     ofPushMatrix();
     ofScale(fs, fs);
 
@@ -668,21 +672,22 @@ void GraphicScore::renderVideoNumbers(CVPipeline& cv) {
 }
 
 // ---- VideoLines --------------------------------------------------------------
-// Cinematic line-drawing in three layers:
+// Dibujo de líneas cinematográfico en tres capas:
 //
-//   1. CLD texture   — ofxCv::CLD (FDoG Coherent Line Drawing) on a bilateral-
-//                      filtered grayscale frame gives soft interior body lines.
-//                      Rendered as a bilinearly-scaled texture so the upscaling
-//                      itself produces a gentle, soft-pencil softness.
+//   1. Textura CLD   — ofxCv::CLD (FDoG Coherent Line Drawing) sobre un fotograma
+//                      en escala de grises filtrado bilateral produce líneas
+//                      interiores suaves del cuerpo.
+//                      Se renderiza como textura escalada bilinealmente para que
+//                      el propio upscaling dé una suavidad de lápiz blando.
 //
-//   2. FG silhouettes — background-subtracted foreground mask → morph close →
+//   2. Siluetas FG   — máscara de primer plano (sustracción de fondo) → morph close →
 //                      findContours → approxPolyDP → ofPolyline::getSmoothed +
-//                      getResampledBySpacing → three-pass halo / mid-glow / crisp.
+//                      getResampledBySpacing → tres pases halo / brillo medio / nítido.
 //
-//   3. Flow strokes  — Farneback flow field sampled on a grid: short directed
-//                      line segments that encode motion direction / speed.
+//   3. Trazos de flow — campo Farneback muestreado en una rejilla: segmentos
+//                      cortos dirigidos que codifican dirección / velocidad del movimiento.
 //
-// No raw pixel edges. Everything is anti-aliased and intentional.
+// Sin bordes de píxel crudos. Todo está antialiased y es deliberado.
 void GraphicScore::renderVideoLines(CVPipeline& cv) {
     const cv::Mat& gray = cv.getGrayMat();
     glm::vec2 aScale = cv.getAnalysisScale();
@@ -695,40 +700,40 @@ void GraphicScore::renderVideoLines(CVPipeline& cv) {
     ofNoFill();
 
     // =========================================================================
-    // Layer 1: CLD — Coherent Line Drawing (FDoG interior lines)
+    // Capa 1: CLD — Coherent Line Drawing (líneas interiores FDoG)
     // =========================================================================
     if (!gray.empty()) {
-        // Bilateral filter first: smooths jersey-pattern / grass noise while
-        // preserving the body-edge gradients that CLD cares about.
+        // Primero filtro bilateral: suaviza ruido de camiseta / césped conservando
+        // los gradientes de borde del cuerpo que le importan a CLD.
         cv::Mat filtered;
         cv::bilateralFilter(gray, filtered, 7, 50.0, 50.0);
 
-        // CLD: ETF + FDoG gives coherent, artist-quality edge lines
+        // CLD: ETF + FDoG da líneas de borde coherentes, de calidad artística
         // halfw=4, smoothPasses=2, sigma1=0.4, sigma2=3, tau=0.97
         cv::Mat cldResult;
         ofxCv::CLD(filtered, cldResult, 4, 2, 0.4, 3.0, 0.97, 0);
 
-        // Threshold: dark pixels are the lines.  OTSU auto-finds the cut point.
+        // Umbral: los píxeles oscuros son las líneas. OTSU encuentra el corte automáticamente.
         cv::Mat cldLines;
         cv::threshold(cldResult, cldLines, 0, 255,
                       cv::THRESH_BINARY_INV | cv::THRESH_OTSU);
 
-        // Convert to RGB so ofSetColor tinting works in GL4.1
+        // Convertir a RGB para que el tinte de ofSetColor funcione en GL4.1
         cv::Mat cldRGB;
         cv::cvtColor(cldLines, cldRGB, cv::COLOR_GRAY2RGB);
         edgesImg_.setFromPixels(cldRGB.data, cldRGB.cols, cldRGB.rows, OF_IMAGE_COLOR);
 
-        // Bilinear upscale gives a pleasantly soft "pencil" quality
+        // El upscale bilineal da una calidad de "lápiz" agradablemente suave
         ofSetColor(c.r, c.g, c.b, (int)(params_.markOpacity * 120.f));
         edgesImg_.draw(0, 0, (float)w_, (float)h_);
     }
 
     // =========================================================================
-    // Layer 2: FG silhouette polylines (clean outer player shapes)
+    // Capa 2: polilíneas de silueta FG (formas exteriores limpias de los jugadores)
     // =========================================================================
     const cv::Mat& fg = cv.getFgMask();
     if (!fg.empty()) {
-        // Morphological close fills jersey-gap holes
+        // El cierre morfológico rellena huecos entre camisetas
         cv::Mat fgClean;
         cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
         cv::morphologyEx(fg, fgClean, cv::MORPH_CLOSE, kernel);
@@ -736,7 +741,7 @@ void GraphicScore::renderVideoLines(CVPipeline& cv) {
         std::vector<std::vector<cv::Point>> contours;
         cv::findContours(fgClean, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_TC89_L1);
 
-        // Build smoothed polylines once, draw in multiple passes
+        // Construye las polilíneas suavizadas una vez; dibuja en varios pases
         std::vector<ofPolyline> silhouettes;
         silhouettes.reserve(contours.size());
         for (auto& cont : contours) {
@@ -750,8 +755,8 @@ void GraphicScore::renderVideoLines(CVPipeline& cv) {
                 raw.addVertex((float)pt.x, (float)pt.y);
             raw.close();
 
-            // getSmoothed + getResampledBySpacing turns polygon edges into
-            // fluid drawing-quality curves (the critical step)
+            // getSmoothed + getResampledBySpacing convierte aristas de polígono
+            // en curvas fluidas de calidad de dibujo (el paso crítico)
             silhouettes.push_back(
                 raw.getSmoothed(9).getResampledBySpacing(5.f));
         }
@@ -759,17 +764,17 @@ void GraphicScore::renderVideoLines(CVPipeline& cv) {
         ofPushMatrix();
         ofScale(aScale.x, aScale.y);
 
-        // Wide soft halo
+        // Halo amplio y suave
         ofSetLineWidth(7.f * invS);
         ofSetColor(c.r, c.g, c.b, 12);
         for (auto& p : silhouettes) p.draw();
 
-        // Mid-glow
+        // Brillo medio
         ofSetLineWidth(3.f * invS);
         ofSetColor(c.r, c.g, c.b, 30);
         for (auto& p : silhouettes) p.draw();
 
-        // Crisp ink line
+        // Línea de tinta nítida
         ofSetLineWidth(1.4f * invS);
         ofSetColor(c.r, c.g, c.b, (int)(params_.markOpacity * 255.f));
         for (auto& p : silhouettes) p.draw();
@@ -778,8 +783,8 @@ void GraphicScore::renderVideoLines(CVPipeline& cv) {
     }
 
     // =========================================================================
-    // Layer 2b: Tracked blob accent (extra crispness on individually-tracked
-    //           objects — smoothed ContourFinder polylines)
+    // Capa 2b: acento de blob rastreado (más nitidez en objetos
+    //           rastreados individualmente — polilíneas suavizadas de ContourFinder)
     // =========================================================================
     ofxCv::ContourFinder& finder = cv.getContour();
     int nBlobs = (int)finder.size();
@@ -806,7 +811,7 @@ void GraphicScore::renderVideoLines(CVPipeline& cv) {
     }
 
     // =========================================================================
-    // Layer 3: Farneback optical flow strokes (motion directionality)
+    // Capa 3: trazos de flujo óptico Farneback (direccionalidad del movimiento)
     // =========================================================================
     if (!gray.empty()) {
         ofxCv::FlowFarneback& flowObj = cv.getFlow();
@@ -836,11 +841,11 @@ void GraphicScore::renderVideoLines(CVPipeline& cv) {
 }
 
 // ---- ThermalVision -----------------------------------------------------------
-// Draws the video through the Ironbow thermal colormap shader, then overlays
-// a minimal thermal-camera UI: temperature bar, active blob "heat" markers,
-// and the standard data readout.
+// Dibuja el vídeo con el shader de mapa de color térmico Ironbow y superpone
+// una UI mínima de cámara térmica: barra de temperatura, marcadores de "calor"
+// de blob activos y la lectura de datos habitual.
 void GraphicScore::renderThermal(CVPipeline& cv) {
-    // Use the cover-cropped FBO texture (raw color, already scaled to fill the FBO)
+    // Usa la textura FBO recortada cover (color original, ya escalada para llenar el FBO)
     const ofTexture* src = curBwTex_;
     if (!src || !src->isAllocated()) return;
 
@@ -855,23 +860,23 @@ void GraphicScore::renderThermal(CVPipeline& cv) {
         src->draw(0, 0, (float)w_, (float)h_);
         thermalShader_.end();
     } else {
-        // Graceful fallback — plain B&W so at least something visible shows
+        // Respaldo elegante — B&W plano para que al menos se vea algo
         renderBase(*src);
     }
 
-    // ---- Thermal camera UI overlay ------------------------------------------
+    // ---- Superposición de UI de cámara térmica --------------------------------
     const CVData& data = cv.getData();
     ofColor c = params_.markColor;
     ofPushStyle();
 
-    // Right edge: vertical Ironbow gradient bar (8 px wide)
+    // Borde derecho: barra vertical de degradado Ironbow (8 px de ancho)
     int   barW  = 8;
     int   barH  = h_ - 40;
     float barX  = (float)w_ - barW - 8.f;
     float barY  = 20.f;
     for (int py = 0; py < barH; py++) {
         float t = 1.0f - (float)py / (float)(barH - 1);
-        // Approximate Ironbow stops: 0=black, 0.2=violet, 0.4=crimson, 0.6=orange, 0.8=yellow, 1=white
+        // Aproximación de paradas Ironbow: 0=negro, 0.2=violeta, 0.4=carmesí, 0.6=naranja, 0.8=amarillo, 1=blanco
         ofColor tc;
         if      (t < 0.2f) { float f = t / 0.2f;
                               tc = ofColor((int)(f*28), (int)(f*10), (int)(f*82)); }
@@ -886,26 +891,26 @@ void GraphicScore::renderThermal(CVPipeline& cv) {
         ofSetColor(tc);
         ofDrawRectangle(barX, barY + py, barW, 1);
     }
-    // Border
+    // Borde
     ofNoFill();
     ofSetColor(c.r, c.g, c.b, 70);
     ofDrawRectangle(barX - 1, barY - 1, barW + 2, barH + 2);
 
-    // Tick showing current energy level
+    // Marca que indica el nivel de energía actual
     float energyTick = barY + barH * (1.0f - ofClamp(data.motionEnergy * 4.f, 0.f, 1.f));
     ofFill();
     ofSetLineWidth(1.5f);
     ofSetColor(255, 200);
     ofDrawLine(barX - 6, energyTick, barX - 1, energyTick);
 
-    // HOT / CLD labels
+    // Etiquetas HOT / CLD
     ofSetColor(c.r, c.g, c.b, 150);
     if (monoFont_.isLoaded()) {
         monoFont_.drawString("HOT", barX - 20, barY + 10);
         monoFont_.drawString("CLD", barX - 20, barY + barH + 6);
     }
 
-    // Blob heat-spot cross-hairs
+    // Cruces en los puntos calientes de blob
     glm::vec2 scale  = cv.getAnalysisScale();
     ofxCv::ContourFinder& finder = cv.getContour();
     int nBlobs = (int)finder.size();
@@ -937,7 +942,7 @@ void GraphicScore::renderThermal(CVPipeline& cv) {
             ofDrawBitmapString(tStr, bx + 9, by);
     }
 
-    // Frame counter top-left
+    // Contador de fotogramas arriba a la izquierda
     ofSetColor(c.r, c.g, c.b, 140);
     std::string frame = "FR " + ofToString((unsigned long long)ofGetFrameNum() % 10000ULL, 4, '0');
     if (monoFont_.isLoaded())
@@ -949,19 +954,19 @@ void GraphicScore::renderThermal(CVPipeline& cv) {
 }
 
 // ---- renderDataHUD -----------------------------------------------------------
-// Minimal persistent data stream drawn on top of EVERY mode.
-// Keeps the "always monitored" feeling even in clean/color modes.
+// Flujo de datos persistente mínimo dibujado encima de TODOS los modos.
+// Mantiene la sensación de "siempre monitorizado" incluso en modos limpios/en color.
 void GraphicScore::renderDataHUD(const CVData& data) {
     ofPushStyle();
 
-    // Left edge: thin vertical energy bar (2 px wide, bottom-anchored)
+    // Borde izquierdo: barra vertical fina de energía (2 px de ancho, anclada abajo)
     float barMaxH = (float)h_ * 0.25f;
     float barH    = ofClamp(data.motionEnergy * 5.f, 0.f, 1.f) * barMaxH;
     ofSetColor(255, 50);
     ofSetLineWidth(2.f);
     ofDrawLine(1.f, (float)h_, 1.f, (float)h_ - barH);
 
-    // Bottom-left: frame number + blob count (monospace, very small, low opacity)
+    // Abajo a la izquierda: número de fotograma + recuento de blobs (monoespaciado, muy pequeño, baja opacidad)
     ofSetColor(255, 55);
     char hud[32];
     snprintf(hud, sizeof(hud), "%04llu N%d", (unsigned long long)(ofGetFrameNum() % 10000), data.blobCount);
@@ -970,7 +975,7 @@ void GraphicScore::renderDataHUD(const CVData& data) {
     else
         ofDrawBitmapString(hud, 6, (float)h_ - 10);
 
-    // Ball crosshair — always shown when ball is detected (any mode)
+    // Cruz del balón — siempre visible cuando se detecta el balón (cualquier modo)
     if (data.events.ballDetected) {
         float bx = data.events.ballPos.x * (float)w_;
         float by = data.events.ballPos.y * (float)h_;
@@ -983,7 +988,7 @@ void GraphicScore::renderDataHUD(const CVData& data) {
     ofPopStyle();
 }
 
-// ---- Flash -------------------------------------------------------------------
+// ---- Flash --------------------------------------------------------------------
 void GraphicScore::renderFlash() {
     float alpha = ofMap((float)flashTimer_, 0.f, (float)params_.flashDuration, 200.f, 0.f);
     ofPushStyle();
@@ -992,24 +997,36 @@ void GraphicScore::renderFlash() {
     ofPopStyle();
 }
 
-// ---- Draw --------------------------------------------------------------------
-void GraphicScore::draw(int x, int y, int w, int h) {
+// ---- Draw ---------------------------------------------------------------------
+void GraphicScore::draw(int x, int y, int w, int h, float blackLevelCrush) {
+    // Todo excepto la nube de puntos llega a las ventanas por esta llamada,
+    // el único sitio donde se impone la regla de escala de grises.
+    if (!monoShader_.isLoaded()) {
+        fbo_.draw(x, y, w, h);
+        return;
+    }
+    monoShader_.begin();
+    monoShader_.setUniformTexture("tex0", fbo_.getTexture(), 0);
+    monoShader_.setUniform1f("u_blackLevel", blackLevelCrush);
     fbo_.draw(x, y, w, h);
+    monoShader_.end();
 }
 
 // ---- updateSlitFbo -----------------------------------------------------------
-// Two layers combined into one cinematic composite:
-//   1. Ribbon  — classic Form+Code slit-scan: every frame, the center column
-//      of the grayscale analysis frame is written into a ring buffer and the
-//      buffer is unrolled left(oldest)->right(newest) with a brightness fade.
-//   2. Ghosts  — stroboscopic superposition: every slitInterval frames, a full
-//      grayscale frame is captured into a circular buffer of kSlitLayers
-//      slots; the ghost layer (recomputed only on capture frames) screen-blends
-//      all filled slots, oldest faintest -> newest brightest.
-// The two layers are screen-blended together every frame so the flowing
-// wave-distortion of the ribbon shows through while frozen full-body
-// silhouettes float on top of it.
-// Runs BEFORE fbo_.begin() — no FBO synchronisation issues possible.
+// Dos capas combinadas en un compuesto cinematográfico:
+//   1. Cinta   — slit-scan clásico Form+Code: cada fotograma, la columna central
+//      del fotograma de análisis en escala de grises se escribe en un buffer
+//      circular y el buffer se desenrolla izquierda(más antiguo)->derecha(más nuevo)
+//      con un fundido de brillo.
+//   2. Fantasmas — superposición estroboscópica: cada slitInterval fotogramas se
+//      captura un fotograma gris completo en un buffer circular de kSlitLayers
+//      huecos; la capa fantasma (recalculada solo en fotogramas de captura)
+//      hace screen-blend de todos los huecos llenos, más antiguo más tenue ->
+//      más nuevo más brillante.
+// Las dos capas se mezclan con screen-blend cada fotograma para que la
+// distorsión ondulante de la cinta se vea mientras las siluetas de cuerpo
+// entero congeladas flotan encima.
+// Se ejecuta ANTES de fbo_.begin() — no hay problemas de sincronización de FBO.
 void GraphicScore::updateSlitFbo(CVPipeline& cv) {
     const cv::Mat& gray = cv.getGrayMat();
     if (gray.empty()) return;
@@ -1017,14 +1034,15 @@ void GraphicScore::updateSlitFbo(CVPipeline& cv) {
     const int aW = gray.cols;
     const int aH = gray.rows;
 
-    // ---- 1. Ribbon: moving sample slice + motion-driven write speed -----------
-    // Rather than a fixed center column advancing at constant speed (the
-    // "boring, one direction" look), the sampled column follows the live
-    // motion/blob centroid, and the number of columns stamped per frame
-    // varies with motion energy — fast motion compresses more time into
-    // less space (streaking), calm motion stretches a moment across more
-    // space (holds). This keeps the classic Form+Code ribbon structure but
-    // makes both WHAT is sampled and HOW FAST it scrolls reactive.
+    // ---- 1. Cinta: rebanada de muestreo móvil + velocidad de escritura por movimiento --
+    // En vez de una columna central fija que avanza a velocidad constante (el
+    // aspecto "aburrido, una sola dirección"), la columna muestreada sigue el
+    // centroide vivo de movimiento/blob, y el número de columnas escritas por
+    // fotograma varía con la energía de movimiento — el movimiento rápido
+    // comprime más tiempo en menos espacio (estelas), el calmo estira un
+    // instante en más espacio (sostiene). Conserva la estructura clásica
+    // Form+Code de la cinta, pero hace reactivos QUÉ se muestrea y a QUÉ
+    // VELOCIDAD se desplaza.
     if (slitRibbonMat_.empty() || slitRibbonMat_.cols != aW || slitRibbonMat_.rows != aH)
         slitRibbonMat_ = cv::Mat::zeros(aH, aW, CV_8UC1);
 
@@ -1040,13 +1058,14 @@ void GraphicScore::updateSlitFbo(CVPipeline& cv) {
         }
         if (sumW > 0.f) targetSrcXNorm = sumWX / sumW;
     }
-    // Smooth toward the target so the slice drifts rather than jitters.
+    // Suaviza hacia el objetivo para que la rebanada derive en vez de temblar.
     slitSrcXNorm_ += (targetSrcXNorm - slitSrcXNorm_) * 0.12f;
     slitSrcXNorm_ = ofClamp(slitSrcXNorm_, 0.05f, 0.95f);
     const int srcX = (int)(slitSrcXNorm_ * (float)(aW - 1));
 
-    // Variable write speed: 1..4 columns/frame depending on motion energy,
-    // accumulated fractionally so slow energy still advances smoothly.
+    // Velocidad de escritura variable: 1..4 columnas/fotograma según la energía
+    // de movimiento, acumulada de forma fraccionaria para que la energía baja
+    // siga avanzando con suavidad.
     slitStepAccum_ += 1.0f + ofClamp(cvData.motionEnergy * 6.f, 0.f, 3.f);
     int steps = (int)slitStepAccum_;
     slitStepAccum_ -= (float)steps;
@@ -1060,13 +1079,13 @@ void GraphicScore::updateSlitFbo(CVPipeline& cv) {
 
     cv::Mat ribbon(aH, aW, CV_8UC1);
     for (int x = 0; x < aW; x++) {
-        int   bufX = (slitWriteX_ + x) % aW;                    // oldest first
+        int   bufX = (slitWriteX_ + x) % aW;                    // el más antiguo primero
         float fade = 0.35f + 0.65f * ((float)x / float(aW - 1));
         for (int y = 0; y < aH; y++)
             ribbon.at<uint8_t>(y, x) = (uint8_t)(slitRibbonMat_.at<uint8_t>(y, bufX) * fade);
     }
 
-    // ---- 2. Ghosts: capture a full frame every slitInterval frames -----------
+    // ---- 2. Fantasmas: captura un fotograma completo cada slitInterval fotogramas --
     slitFrameCount_++;
     const int interval = std::max(1, params_.slitInterval);
     bool captured = false;
@@ -1078,20 +1097,20 @@ void GraphicScore::updateSlitFbo(CVPipeline& cv) {
         if (slitLayersFilled_ < kSlitLayers) slitLayersFilled_++;
     }
 
-    // Recompute the cached ghost layer only when a new snapshot was captured.
+    // Recalcula la capa fantasma en caché solo cuando se captura una instantánea nueva.
     if (captured || slitGhostMat_.empty()) {
         cv::Mat ghosts = cv::Mat::zeros(aH, aW, CV_8UC1);
         for (int i = 0; i < slitLayersFilled_; i++) {
-            // Map ring: i=0 is oldest, i=filled-1 is newest
+            // Mapeo del anillo: i=0 es el más antiguo, i=filled-1 es el más nuevo
             int idx = (slitLayerWrite_ - slitLayersFilled_ + i + kSlitLayers) % kSlitLayers;
-            float t = (float)(i + 1) / (float)slitLayersFilled_;   // 0..1, newest = 1
-            float w = 0.25f + 0.65f * t;                             // weight: 0.25 -> 0.9
+            float t = (float)(i + 1) / (float)slitLayersFilled_;   // 0..1, el más nuevo = 1
+            float w = 0.25f + 0.65f * t;                             // peso: 0.25 -> 0.9
 
             const cv::Mat& src = slitFrames_[idx];
             for (int y = 0; y < aH; y++) {
                 for (int x = 0; x < aW; x++) {
-                    float sv = src.at<uint8_t>(y, x) * w / 255.f;   // 0..1 weighted
-                    float ov = ghosts.at<uint8_t>(y, x) / 255.f;    // current out 0..1
+                    float sv = src.at<uint8_t>(y, x) * w / 255.f;   // 0..1 ponderado
+                    float ov = ghosts.at<uint8_t>(y, x) / 255.f;    // salida actual 0..1
                     float result = 1.f - (1.f - ov) * (1.f - sv);   // screen blend
                     ghosts.at<uint8_t>(y, x) = (uint8_t)(result * 255.f);
                 }
@@ -1100,7 +1119,7 @@ void GraphicScore::updateSlitFbo(CVPipeline& cv) {
         slitGhostMat_ = ghosts;
     }
 
-    // ---- 3. Combine ribbon + ghosts via screen blend, every frame ------------
+    // ---- 3. Combina cinta + fantasmas con screen blend, cada fotograma ---------
     cv::Mat combined(aH, aW, CV_8UC1);
     for (int y = 0; y < aH; y++) {
         for (int x = 0; x < aW; x++) {
@@ -1110,8 +1129,8 @@ void GraphicScore::updateSlitFbo(CVPipeline& cv) {
         }
     }
 
-    // Keep the composite strictly grayscale — no markColor tint, so the
-    // superposition stays readable regardless of the mode-cycling mark color.
+    // El compuesto permanece estrictamente en escala de grises — sin tinte de
+    // markColor, para que la superposición se lea con cualquier color de marca.
     cv::Mat assembled3;
     cv::cvtColor(combined, assembled3, cv::COLOR_GRAY2RGB);
 
@@ -1120,7 +1139,7 @@ void GraphicScore::updateSlitFbo(CVPipeline& cv) {
 }
 
 // ---- renderSlitScan ----------------------------------------------------------
-// Draws the composited superposition texture and a minimal label overlay.
+// Dibuja la textura de superposición compuesta y una etiqueta mínima encima.
 void GraphicScore::renderSlitScan() {
     ofPushStyle();
 
@@ -1129,8 +1148,8 @@ void GraphicScore::renderSlitScan() {
         slitImage_.draw(0, 0, (float)w_, (float)h_);
     }
 
-    // Fixed white overlay (not markColor) — keeps the mode monochrome so the
-    // red/blue mark-color cycle never tints the superposition.
+    // Superposición blanca fija (no markColor) — mantiene el modo monocromo para
+    // que el ciclo rojo/azul de color de marca no tiña la superposición.
     ofSetLineWidth(1.5f);
     ofSetColor(255, 255, 255, 200);
     ofDrawLine((float)(w_ - 1), 0, (float)(w_ - 1), (float)h_);
@@ -1142,7 +1161,7 @@ void GraphicScore::renderSlitScan() {
     ofPopStyle();
 }
 
-// ---- Utility -----------------------------------------------------------------
+// ---- Utilidad -----------------------------------------------------------------
 std::string GraphicScore::toBinary8(int v) {
     std::string s;
     s.reserve(8);
