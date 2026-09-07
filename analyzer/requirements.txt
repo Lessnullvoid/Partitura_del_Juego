@@ -1,0 +1,11 @@
+# The synthetic PDJV fixture path remains stdlib-only. These are the isolated
+# production-analysis dependencies installed in analyzer/.venv.
+numpy==2.5.2
+opencv-python-headless==5.0.0.93
+torch==2.13.0
+torchvision==0.28.0
+ultralytics==8.4.137
+lap==0.5.13
+transformers==5.16.1
+pillow==12.3.0
+safetensors==0.8.0

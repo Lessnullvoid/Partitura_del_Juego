@@ -9,6 +9,7 @@
 #include "SettingsStore.h"
 #include "VideoDirector.h"
 #include "VisualComposer.h"
+#include "VideoPointCloudGenerator.h"
 #include <CoreGraphics/CoreGraphics.h>
 #include <algorithm>
 #include <array>
@@ -37,8 +38,8 @@ void configureBundledDataPath() {
 }
 
 int main() {
-    // Before any window exists, openFrameworks has not yet selected the app
-    // bundle's data directory. Resolve it explicitly for Finder launches.
+    // Antes de que exista ninguna ventana, openFrameworks aún no ha seleccionado
+    // el directorio de datos del bundle. Se resuelve explícitamente para lanzamientos desde Finder.
     configureBundledDataPath();
 
     std::string settingsError;
@@ -56,8 +57,13 @@ int main() {
     int oscPort = 9001;
     if (cfg.contains("osc") && cfg["osc"].contains("port"))
         oscPort = cfg["osc"]["port"].get<int>();
+    if (const char* port = std::getenv("PDJ_OSC_PORT"))
+        oscPort = std::max(1, std::atoi(port));
+    int oscListenPort = 9002;
+    if (cfg.contains("osc") && cfg["osc"].contains("listenPort"))
+        oscListenPort = cfg["osc"]["listenPort"].get<int>();
 
-    // CV params
+    // Parámetros CV
     CVParams cvp;
     if (cfg.contains("cv")) {
         const auto& c = cfg["cv"];
@@ -85,6 +91,8 @@ int main() {
     if (cfg.contains("videoDirector")) {
         const auto& v = cfg["videoDirector"];
         videoParams.enabled           = v.value("enabled", videoParams.enabled);
+        videoParams.sharedEventsEnabled =
+            v.value("sharedEventsEnabled", videoParams.sharedEventsEnabled);
         videoParams.shortWeight       = v.value("shortWeight", videoParams.shortWeight);
         videoParams.longWeight        = v.value("longWeight", videoParams.longWeight);
         videoParams.fullWeight        = v.value("fullWeight", videoParams.fullWeight);
@@ -102,6 +110,30 @@ int main() {
     if (cfg.contains("visualComposer")) {
         const auto& c = cfg["visualComposer"];
         composerParams.enabled = c.value("enabled", composerParams.enabled);
+        composerParams.programEnabled =
+            c.value("programEnabled", composerParams.programEnabled);
+        composerParams.pulseMomentDuration =
+            c.value("pulseMomentDuration", composerParams.pulseMomentDuration);
+        composerParams.barScanMomentDuration =
+            c.value("barScanMomentDuration", composerParams.barScanMomentDuration);
+        composerParams.maxVideoPerGroup =
+            ofClamp(c.value("maxVideoPerGroup",
+                            composerParams.maxVideoPerGroup), 1, 2);
+        composerParams.dualVideoProbability =
+            c.value("dualVideoProbability",
+                    composerParams.dualVideoProbability);
+        composerParams.takeoverIntervalMin =
+            c.value("takeoverIntervalMin",
+                    composerParams.takeoverIntervalMin);
+        composerParams.takeoverIntervalMax =
+            c.value("takeoverIntervalMax",
+                    composerParams.takeoverIntervalMax);
+        composerParams.takeoverDurationMin =
+            c.value("takeoverDurationMin",
+                    composerParams.takeoverDurationMin);
+        composerParams.takeoverDurationMax =
+            c.value("takeoverDurationMax",
+                    composerParams.takeoverDurationMax);
         composerParams.videoProbability =
             c.value("videoProbability", composerParams.videoProbability);
         composerParams.generatorProbability =
@@ -126,6 +158,39 @@ int main() {
             c.value("transitionMinDuration", composerParams.transitionMinDuration);
         composerParams.transitionMaxDuration =
             c.value("transitionMaxDuration", composerParams.transitionMaxDuration);
+        composerParams.noiseEventEnabled =
+            c.value("noiseEventEnabled",  composerParams.noiseEventEnabled);
+        composerParams.noiseEventInterval =
+            c.value("noiseEventInterval", composerParams.noiseEventInterval);
+        composerParams.noiseEventDuration =
+            c.value("noiseEventDuration", composerParams.noiseEventDuration);
+        composerParams.generatorInvertEnabled =
+            c.value("generatorInvertEnabled",  composerParams.generatorInvertEnabled);
+        composerParams.generatorInvertInterval =
+            c.value("generatorInvertInterval", composerParams.generatorInvertInterval);
+        composerParams.generatorInvertDuration =
+            c.value("generatorInvertDuration", composerParams.generatorInvertDuration);
+        composerParams.polarityInvertEnabled =
+            c.value("polarityInvertEnabled",  composerParams.polarityInvertEnabled);
+        composerParams.polarityInvertInterval =
+            c.value("polarityInvertInterval", composerParams.polarityInvertInterval);
+        composerParams.polarityInvertDuration =
+            c.value("polarityInvertDuration", composerParams.polarityInvertDuration);
+        composerParams.collectiveLogicEnabled =
+            c.value("collectiveLogicEnabled",
+                    composerParams.collectiveLogicEnabled);
+        composerParams.collectiveDecisionHold =
+            c.value("collectiveDecisionHold",
+                    composerParams.collectiveDecisionHold);
+        composerParams.collectiveMinimumDwell =
+            c.value("collectiveMinimumDwell",
+                    composerParams.collectiveMinimumDwell);
+        composerParams.collectiveEventCooldown =
+            c.value("collectiveEventCooldown",
+                    composerParams.collectiveEventCooldown);
+        composerParams.collectiveResponse =
+            c.value("collectiveResponse",
+                    composerParams.collectiveResponse);
         composerParams.bpm = c.value("bpm", composerParams.bpm);
         composerParams.beatSubdivision =
             c.value("beatSubdivision", composerParams.beatSubdivision);
@@ -134,6 +199,12 @@ int main() {
                                 static_cast<int>(composerParams.recentHistorySize))));
         composerParams.seed =
             c.value("seed", composerParams.seed);
+        if (c.contains("disabledGenerators") &&
+            c["disabledGenerators"].is_array()) {
+            composerParams.disabledGenerators.clear();
+            for (const auto& entry : c["disabledGenerators"])
+                composerParams.disabledGenerators.push_back(entry.get<int>());
+        }
         if (c.contains("organizationWeights") &&
             c["organizationWeights"].is_array()) {
             for (std::size_t i = 0;
@@ -143,6 +214,22 @@ int main() {
                     c["organizationWeights"][i].get<float>();
             }
         }
+    }
+    if (const char* enabled = std::getenv("PDJ_COMPOSER_ENABLED"))
+        composerParams.enabled = std::atoi(enabled) != 0;
+    if (const char* seed = std::getenv("PDJ_COMPOSER_SEED"))
+        composerParams.seed = static_cast<std::uint32_t>(std::strtoul(seed, nullptr, 10));
+    if (const char* seconds = std::getenv("PDJ_PULSE_MOMENT_SECONDS"))
+        composerParams.pulseMomentDuration =
+            std::max(0.1f, static_cast<float>(std::atof(seconds)));
+    if (const char* seconds = std::getenv("PDJ_BARSCAN_MOMENT_SECONDS"))
+        composerParams.barScanMomentDuration =
+            std::max(0.1f, static_cast<float>(std::atof(seconds)));
+    if (const char* seconds = std::getenv("PDJ_TAKEOVER_INTERVAL_SECONDS")) {
+        const float interval =
+            std::max(1.f, static_cast<float>(std::atof(seconds)));
+        composerParams.takeoverIntervalMin = interval;
+        composerParams.takeoverIntervalMax = interval;
     }
 
     const int targetFPS = std::max(1, cfg.value("targetFPS", 30));
@@ -185,28 +272,48 @@ int main() {
         performanceConfig.warmupSeconds =
             std::max(0.f, static_cast<float>(std::atof(warmup)));
 
-    // Shared non-GL systems
+    // Sistemas compartidos no GL
     auto pool = std::make_shared<ClipPool>();
     std::string clipFolder = "cortos";
-    if (cfg.contains("clips") && cfg["clips"].contains("folder"))
-        clipFolder = cfg["clips"]["folder"].get<std::string>();
+    std::string horizontalClipFolder = "";
+    if (cfg.contains("clips")) {
+        if (cfg["clips"].contains("folder"))
+            clipFolder = cfg["clips"]["folder"].get<std::string>();
+        if (cfg["clips"].contains("horizontalFolder"))
+            horizontalClipFolder = cfg["clips"]["horizontalFolder"].get<std::string>();
+    }
+    // Los paquetes portátiles guardan el material mutable junto al .app firmado.
+    // Se prefieren esas carpetas si existen para que un settings de una
+    // instalación anterior no redirija el paquete a una ruta solo de desarrollo.
+    const std::string portablePortrait = "../../../../Videos/Portrait";
+    const std::string portableHorizontal = "../../../../Videos/Horizontal";
+    if (ofDirectory::doesDirectoryExist(
+            ofToDataPath(portablePortrait, true))) {
+        clipFolder = portablePortrait;
+    }
+    if (ofDirectory::doesDirectoryExist(
+            ofToDataPath(portableHorizontal, true))) {
+        horizontalClipFolder = portableHorizontal;
+    }
     pool->scan(clipFolder);
+    if (!horizontalClipFolder.empty())
+        pool->scanHorizontal(horizontalClipFolder);
 
     auto oscSender = std::make_shared<OSCSender>();
     oscSender->setup(oscHost, oscPort);
 
-    // Global performance director (shared across all channels)
+    // Director de interpretación global (compartido por todos los canales)
     auto globalDir = std::make_shared<GlobalDirector>();
     globalDir->setup();
 
     auto videoDir = std::make_shared<VideoDirector>();
     auto visualComposer = std::make_shared<VisualComposer>();
 
-    // Channels (GL resources allocated in app setup; live for the main loop).
+    // Canales (recursos GL asignados en setup de la app; viven durante el bucle principal).
     static constexpr int kChannelCount = VideoDirector::kChannelCount;
     std::array<Channel, kChannelCount> channels;
 
-    // Window geometry — read from settings, sensible defaults for 8 portrait monitors.
+    // Geometría de ventanas — leída de settings, valores por defecto razonables para 8 monitores verticales.
     struct WinConfig { int x, y, w, h; };
     std::array<WinConfig, kChannelCount> chCfg = {{
         {0,    0, 1080, 1920},
@@ -237,16 +344,22 @@ int main() {
         ctrlCfg.h = cj.value("height", ctrlCfg.h);
     }
 
-    // --- Output mode -----------------------------------------------------------
-    // "auto"        : detect 4K+ display at startup; use singleWindow if found,
-    //                 multiWindow otherwise.
-    // "singleWindow": one output with channels 0-3.
-    // "dualWindow8": two outputs, each split into four vertical segments.
-    // "multiWindow": legacy four separate windows.
-    // "multiWindow8": eight diagnostic windows.
+    // --- Modo de salida --------------------------------------------------------
+    // "auto"        : detecta una pantalla 4K+ al arrancar; usa singleWindow
+    //                 si la encuentra, multiWindow en caso contrario.
+    // "singleWindow": una salida con canales 0-3.
+    // "dualWindow8": dos salidas, cada una dividida en cuatro segmentos verticales.
+    // "multiWindow": legado de cuatro ventanas separadas.
+    // "multiWindow8": ocho ventanas de diagnóstico.
     std::string outputMode = cfg.value("outputMode", "multiWindow");
 
-    // Presentation geometry. Legacy singleWindow config remains supported.
+    // Si es true, las ventanas de presentación se abren a pantalla completa nativa
+    // (sin barra de título; el contenido llena toda la pantalla desde el arranque).
+    // Solo aplica a dualWindow8 y singleWindow.
+    const bool presentationFullscreen =
+        cfg.value("presentationFullscreen", false);
+
+    // Geometría de presentación. La configuración legado de singleWindow sigue soportada.
     int swX = 0, swY = 0, swW = 3840, swH = 2160;
     int sw2X = 3840, sw2Y = 0, sw2W = 3840, sw2H = 2160;
     if (cfg.contains("singleWindow")) {
@@ -256,6 +369,9 @@ int main() {
         swW = sw.value("width",  swW);
         swH = sw.value("height", swH);
     }
+    // Disposición por ventana: "4x1" = cuatro franjas verticales (por defecto), "2x2" = retícula 2x2 horizontal.
+    std::string layoutA = "4x1";
+    std::string layoutB = "4x1";
     if (cfg.contains("presentationWindows") && cfg["presentationWindows"].is_array()) {
         const auto& windows = cfg["presentationWindows"];
         if (!windows.empty()) {
@@ -264,6 +380,7 @@ int main() {
             swY = a.value("y", swY);
             swW = a.value("width", swW);
             swH = a.value("height", swH);
+            layoutA = a.value("layout", layoutA);
         }
         if (windows.size() > 1) {
             const auto& b = windows[1];
@@ -271,8 +388,15 @@ int main() {
             sw2Y = b.value("y", sw2Y);
             sw2W = b.value("width", sw2W);
             sw2H = b.value("height", sw2H);
+            layoutB = b.value("layout", layoutB);
         }
     }
+    const auto parseWallLayout = [](const std::string& s) {
+        return s == "2x2" ? PresentationApp::WallLayout::Grid2x2
+                          : PresentationApp::WallLayout::Strips4x1;
+    };
+    ofLogNotice("main") << "Wall layout A: " << layoutA
+                        << "  Wall layout B: " << layoutB;
 
     if (outputMode == "auto") {
         uint32_t numDisplays = 0;
@@ -324,11 +448,47 @@ int main() {
             outputMode = "dualWindow8";
             ofLogNotice("main") << "Auto-selected two 4K outputs for 8 screens";
         } else {
-            const auto& fallback =
-                externalChoices.empty() ? allChoices : externalChoices;
-            if (!fallback.empty()) {
-                bestID = fallback.front().id;
-                bestIs4K = fallback.front().is4K;
+            // Autodetección del par ICUIXIAN: dos salidas externas 1920x1080.
+            // La más a la izquierda es Wall A (4x1 vertical, rotación ICUIXIAN 90 deg).
+            // La más a la derecha es Wall B (2x2 horizontal, rotación ICUIXIAN 0 deg).
+            std::vector<DisplayChoice> icuixian;
+            for (const auto& d : externalChoices) {
+                const CGRect r = CGDisplayBounds(d.id);
+                if (static_cast<int>(r.size.width)  == 1920 &&
+                    static_cast<int>(r.size.height) == 1080)
+                    icuixian.push_back(d);
+            }
+            if (icuixian.size() >= 2) {
+                std::sort(icuixian.begin(), icuixian.end(),
+                          [](const DisplayChoice& a, const DisplayChoice& b) {
+                              const CGRect ra = CGDisplayBounds(a.id);
+                              const CGRect rb = CGDisplayBounds(b.id);
+                              if (ra.origin.x != rb.origin.x)
+                                  return ra.origin.x < rb.origin.x;
+                              return ra.origin.y < rb.origin.y;
+                          });
+                const CGRect rA = CGDisplayBounds(icuixian[0].id);
+                const CGRect rB = CGDisplayBounds(icuixian[1].id);
+                swX  = (int)rA.origin.x; swY  = (int)rA.origin.y;
+                swW  = (int)rA.size.width;  swH  = (int)rA.size.height;
+                sw2X = (int)rB.origin.x; sw2Y = (int)rB.origin.y;
+                sw2W = (int)rB.size.width;  sw2H = (int)rB.size.height;
+                layoutA = "4x1";
+                layoutB = "2x2";
+                outputMode = "dualWindow8";
+                ofLogNotice("main")
+                    << "Auto-detected ICUIXIAN pair:"
+                    << " Wall A (4x1 portrait, rot 90) @ "
+                    << swX << "," << swY << " " << swW << "x" << swH
+                    << "  Wall B (2x2 landscape, rot 0) @ "
+                    << sw2X << "," << sw2Y << " " << sw2W << "x" << sw2H;
+            } else {
+                const auto& fallback =
+                    externalChoices.empty() ? allChoices : externalChoices;
+                if (!fallback.empty()) {
+                    bestID = fallback.front().id;
+                    bestIs4K = fallback.front().is4K;
+                }
             }
         }
 
@@ -370,6 +530,25 @@ int main() {
             g.value("intensity", generatorRuntime.intensity);
         generatorRuntime.density =
             g.value("density", generatorRuntime.density);
+        generatorRuntime.glowGain =
+            g.value("glowGain", generatorRuntime.glowGain);
+        generatorRuntime.glowRadius =
+            g.value("glowRadius", generatorRuntime.glowRadius);
+        generatorRuntime.feedbackDecay =
+            g.value("feedbackDecay", generatorRuntime.feedbackDecay);
+        const auto readColor = [&g](const char* key, ofColor fallback) {
+            if (!g.contains(key) || !g[key].is_array() ||
+                g[key].size() < 3)
+                return fallback;
+            return ofColor(g[key][0].get<int>(), g[key][1].get<int>(),
+                           g[key][2].get<int>());
+        };
+        generatorRuntime.cyan = g.contains("primaryColor")
+            ? readColor("primaryColor", generatorRuntime.cyan)
+            : readColor("cyan", generatorRuntime.cyan);
+        generatorRuntime.red = g.contains("secondaryColor")
+            ? readColor("secondaryColor", generatorRuntime.red)
+            : readColor("red", generatorRuntime.red);
         generatorRuntime.showHud =
             g.value("showHud", generatorRuntime.showHud);
         generatorRuntime.detailTier =
@@ -377,6 +556,29 @@ int main() {
     }
     for (int i = 0; i < videoDir->channelCount(); ++i)
         channels[i].generatorParams() = generatorRuntime;
+
+    bool invertPolarity = false;
+    if (cfg.contains("visuals"))
+        invertPolarity = cfg["visuals"].value("invertPolarity", invertPolarity);
+    if (const char* invert = std::getenv("PDJ_INVERT_POLARITY"))
+        invertPolarity = std::atoi(invert) != 0;
+    for (int i = 0; i < videoDir->channelCount(); ++i)
+        channels[i].setInvertPolarity(invertPolarity);
+
+    VideoPointCloudSettings vpcGlobal;
+    if (cfg.contains("videoPointCloud"))
+        vpcGlobal = VideoPointCloudSettings::fromJson(cfg["videoPointCloud"]);
+    if (const char* gridSize = std::getenv("PDJ_VPC_GRID_SIZE"))
+        vpcGlobal.applyQualityTier(std::atoi(gridSize));
+    for (int i = 0; i < videoDir->channelCount(); ++i) {
+        VideoPointCloudSettings channelVpc = vpcGlobal;
+        if (cfg.contains("channels") && cfg["channels"].is_array() &&
+            i < static_cast<int>(cfg["channels"].size()) &&
+            cfg["channels"][i].contains("videoPointCloud")) {
+            channelVpc.applyJson(cfg["channels"][i]["videoPointCloud"]);
+        }
+        channels[i].configureVideoPointCloud(channelVpc);
+    }
 
     auto makeControlApp = [&](const std::shared_ptr<ofAppBaseWindow>& sharedWindow) {
         ofGLFWWindowSettings cs;
@@ -394,17 +596,20 @@ int main() {
             chVec.push_back(&channels[i]);
         auto ctrlApp = std::make_shared<ControlApp>(
             chVec, pool.get(), oscSender.get(), globalDir.get(), videoDir.get(),
-            visualComposer.get(), performanceMonitor.get());
+            visualComposer.get(), performanceMonitor.get(), oscListenPort);
         ofRunApp(ctrlWindow, ctrlApp);
     };
 
     if (outputMode == "dualWindow8") {
+        const ofWindowMode presMode =
+            presentationFullscreen ? OF_FULLSCREEN : OF_WINDOW;
+
         ofGLFWWindowSettings firstSettings;
         firstSettings.setGLVersion(4, 1);
         firstSettings.setSize(swW, swH);
         firstSettings.setPosition(glm::vec2(swX, swY));
         firstSettings.title = "PDJ Presentation A";
-        firstSettings.windowMode = OF_WINDOW;
+        firstSettings.windowMode = presMode;
         auto firstWindow = ofCreateWindow(firstSettings);
 
         std::array<Channel*, PresentationApp::kSegments> groupA = {
@@ -413,7 +618,7 @@ int main() {
         auto firstApp = std::make_shared<PresentationApp>(
             groupA, 0, swW, swH, pool.get(), oscSender.get(), cvp,
             globalDir.get(), videoDir.get(), visualComposer.get(),
-            performanceMonitor.get(), 0, targetFPS);
+            performanceMonitor.get(), 0, targetFPS, parseWallLayout(layoutA));
         ofRunApp(firstWindow, firstApp);
 
         ofGLFWWindowSettings secondSettings;
@@ -421,7 +626,7 @@ int main() {
         secondSettings.setSize(sw2W, sw2H);
         secondSettings.setPosition(glm::vec2(sw2X, sw2Y));
         secondSettings.title = "PDJ Presentation B";
-        secondSettings.windowMode = OF_WINDOW;
+        secondSettings.windowMode = presMode;
         secondSettings.shareContextWith = firstWindow;
         auto secondWindow = ofCreateWindow(secondSettings);
 
@@ -431,7 +636,7 @@ int main() {
         auto secondApp = std::make_shared<PresentationApp>(
             groupB, 4, sw2W, sw2H, pool.get(), oscSender.get(), cvp,
             globalDir.get(), videoDir.get(), visualComposer.get(),
-            performanceMonitor.get(), 1, targetFPS);
+            performanceMonitor.get(), 1, targetFPS, parseWallLayout(layoutB));
         ofRunApp(secondWindow, secondApp);
         makeControlApp(firstWindow);
     } else if (outputMode == "singleWindow") {
@@ -440,7 +645,7 @@ int main() {
         ws.setSize(swW, swH);
         ws.setPosition(glm::vec2(swX, swY));
         ws.title      = "PDJ Presentation";
-        ws.windowMode = OF_WINDOW;
+        ws.windowMode = presentationFullscreen ? OF_FULLSCREEN : OF_WINDOW;
 
         auto presWindow = ofCreateWindow(ws);
         std::array<Channel*, PresentationApp::kSegments> chPtrs = {
@@ -453,7 +658,7 @@ int main() {
         ofRunApp(presWindow, presApp);
         makeControlApp(presWindow);
     } else {
-        // Multi-window diagnostic mode: one window per channel.
+        // Modo diagnóstico multi-ventana: una ventana por canal.
         ofGLFWWindowSettings ws;
         ws.setGLVersion(4, 1);
         ws.setSize(chCfg[0].w, chCfg[0].h);

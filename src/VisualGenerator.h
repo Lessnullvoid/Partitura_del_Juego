@@ -13,7 +13,14 @@ enum class GeneratorMode {
     VectorField,
     DataLedger,
     SignalTrace,
-    ThresholdBridge
+    ThresholdBridge,
+    Pulse,
+    BarScan,
+    GranularRaster,
+    OrbitalRings,
+    Strobe,
+    DividedStrobe,
+    AnalogNoise
 };
 
 enum class OrganizationMode {
@@ -42,8 +49,8 @@ enum class ScreenRole {
     Metadata
 };
 
-// Fully resolved values used by a renderer after organization, stage and
-// role mappings have been applied.
+// Valores ya resueltos que usa un renderer tras aplicar los mapeos de
+// organización, etapa y rol.
 struct VisualState {
     double localTime = 0.0;
     float stageProgress = 0.f;
@@ -59,8 +66,8 @@ struct VisualState {
     uint32_t resolvedSeed = 1u;
 };
 
-// A value object intended to be assembled by Channel or GraphicScore.
-// sourceTexture and cvData are borrowed for the duration of render().
+// Objeto-valor pensado para montarse en Channel o GraphicScore.
+// sourceTexture y cvData se toman prestados durante render().
 struct GeneratorContext {
     int width = 0;
     int height = 0;
@@ -89,6 +96,11 @@ struct GeneratorContext {
     uint32_t seed = 1u;
     float intensity = 0.5f;
     float density = 0.5f;
+    float glowGain = 0.9f;
+    float glowRadius = 2.2f;
+    float feedbackDecay = 0.82f;
+    ofColor cyan = ofColor(238, 238, 238);
+    ofColor red = ofColor(112, 112, 112);
 };
 
 class VisualGenerator {
@@ -99,7 +111,7 @@ public:
     void update(const GeneratorContext& context);
     void render(const GeneratorContext& context);
 
-    void setMode(GeneratorMode mode) { mode_ = mode; }
+    void setMode(GeneratorMode mode);
     GeneratorMode getMode() const { return mode_; }
 
     const VisualState& getState() const { return state_; }
@@ -117,6 +129,15 @@ public:
 
 private:
     void ensureAllocated(int width, int height);
+    float glowStrength() const;
+    bool usesFeedback() const;
+    float feedbackScale() const;
+    void compositeGlow(const GeneratorContext& context);
+    void drawAnalogBar(const GeneratorContext& context, float inset, float span,
+                       float top, float thickness, float peak, uint32_t key,
+                       float timeSalt);
+    void drawAnalogHaze(const GeneratorContext& context, float timeSalt);
+    void applyAnalogTreatment(const GeneratorContext& context);
     void renderScene(const GeneratorContext& context);
     void renderRasterPulse(const GeneratorContext& context);
     void renderBitMatrix(const GeneratorContext& context);
@@ -126,6 +147,13 @@ private:
     void renderDataLedger(const GeneratorContext& context);
     void renderSignalTrace(const GeneratorContext& context);
     void renderThresholdBridge(const GeneratorContext& context);
+    void renderPulse(const GeneratorContext& context);
+    void renderBarScan(const GeneratorContext& context);
+    void renderGranularRaster(const GeneratorContext& context);
+    void renderOrbitalRings(const GeneratorContext& context);
+    void renderStrobe(const GeneratorContext& context);
+    void renderDividedStrobe(const GeneratorContext& context);
+    void renderAnalogNoise(const GeneratorContext& context);
 
     void drawSource(const GeneratorContext& context, float alpha);
     void drawFrame(const GeneratorContext& context);
@@ -137,8 +165,23 @@ private:
     static float roleValue(ScreenRole role);
 
     ofFbo fbo_;
+    ofFbo emissionFbo_;
+    ofFbo blurA_;
+    ofFbo blurB_;
+    ofFbo feedbackA_;
+    ofFbo feedbackB_;
+    ofShader blurShader_;
+    bool blurReady_ = false;
+    bool feedbackFlip_ = false;
     GeneratorMode mode_ = GeneratorMode::RasterPulse;
     VisualState state_;
     int width_ = 0;
     int height_ = 0;
+
+    ofTrueTypeFont matrixFont_;
+    int loadedFontSize_ = 0;
+    bool fontReady_ = false;
+
+    ofShader noiseShader_;
+    bool noiseShaderReady_ = false;
 };

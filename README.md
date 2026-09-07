@@ -1,8 +1,14 @@
 # Partitura del Juego
 
-Instalación audiovisual generativa construida con openFrameworks (C++) y SuperCollider. La pieza procesa vídeo deportivo pregrabado y lo relaciona con un sistema de generadores visuales autónomos. Ocho canales salen de un solo ordenador mediante dos ventanas de presentación, cada una dividida en cuatro segmentos verticales para un controlador ICUIXIAN.
+Instalación audiovisual generativa construida con openFrameworks (C++) y SuperCollider. La pieza procesa vídeo deportivo pregrabado y lo relaciona con un sistema de generadores visuales autónomos. Ocho canales salen de un solo ordenador mediante dos ventanas de presentación controladas por dos unidades ICUIXIAN: la ventana A reparte cuatro canales en retrato (4×1), la ventana B reparte cuatro canales en mosaico 2×2 horizontal.
 
-> **Compatibilidad:** `singleWindow` conserva la presentación funcional de cuatro canales. `dualWindow8` activa las dos salidas segmentadas y los canales 0–7. El compositor visual es optativo; desactivado, mantiene el flujo de vídeo existente.
+El modo de salida activo es `dualWindow8`. El compositor visual (`VisualComposer`) está habilitado por defecto. Cada canal genera además una nube de puntos de vídeo por GPU. El runtime volumétrico independiente vive en `volumetric/` (sin vídeo fuente). El análisis fuera de línea vive en `analyzer/`. Formato PDJV: `docs/pdjv/PDJV_FORMAT.md`.
+
+## Descarga
+
+**[Partitura_del_Juego-macOS-arm64.zip](https://github.com/Lessnullvoid/Partitura_del_Juego/releases/download/pdj-video-pointcloud-v1/Partitura_del_Juego-macOS-arm64.zip)** — paquete macOS arm64 (M1 o posterior). Incluye la aplicación compilada, la biblioteca de 48 clips, los shaders y los scripts de audio SuperCollider. No requiere openFrameworks. Ver `distribution/README-macOS-test.md` para instrucciones de primer uso.
+
+[SHA-256](https://github.com/Lessnullvoid/Partitura_del_Juego/releases/download/pdj-video-pointcloud-v1/Partitura_del_Juego-macOS-arm64.zip.sha256) · [Todas las versiones](https://github.com/Lessnullvoid/Partitura_del_Juego/releases)
 
 ---
 
@@ -38,18 +44,23 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    subgraph BA["Ventana A / ICUIXIAN A"]
+    subgraph BA["Ventana A / ICUIXIAN A — layout 4x1, retrato 90°"]
         direction LR
         P0["Ch 0"] ~~~ P1["Ch 1"] ~~~ P2["Ch 2"] ~~~ P3["Ch 3"]
     end
-    subgraph BB["Ventana B / ICUIXIAN B"]
-        direction LR
-        P4["Ch 4"] ~~~ P5["Ch 5"] ~~~ P6["Ch 6"] ~~~ P7["Ch 7"]
+    subgraph BB["Ventana B / ICUIXIAN B — layout 2x2, horizontal 0°"]
+        direction TB
+        P4["Ch 4"] ~~~ P5["Ch 5"]
+        P6["Ch 6"] ~~~ P7["Ch 7"]
     end
     BA ~~~ BB
 ```
 
-Cada monitor es 9:16 en vertical a 1080 × 1920 px. Anchura lógica total del sistema: 8640 px.
+**Ventana A (canales 0–3):** cuatro tiras de retrato 1080×1920 px entregadas a ICUIXIAN A configurado como 4×1 con rotación de 90°. Cada panel recibe 480×1080 px del segmento correspondiente y lo escala y rota a formato vertical.
+
+**Ventana B (canales 4–7):** mosaico 2×2 de pantallas horizontales 1920×1080 px entregado a ICUIXIAN B configurado como 2×2 sin rotación. Cada panel recibe un cuadrante de 960×540 px.
+
+Anchura lógica total del sistema: 8640 px (8 × 1080). La resolución real por canal depende del modo de salida activo.
 
 ---
 
@@ -227,6 +238,72 @@ Todos los modos que no usan color en bruto comienzan con este shader GLSL. Convi
 
 **HUD de datos** — siempre visible sobre cualquier modo: barra de energía vertical (2 px) en el borde izquierdo, contador de fotogramas y recuento de blobs en la esquina inferior izquierda, mira de cruz sobre el balón cuando se detecta.
 
+---
+
+## Nube de puntos de vídeo por GPU
+
+`VideoPointCloudGenerator` convierte en tiempo real el fotograma de vídeo de cada canal en una nube de puntos tridimensional renderizada íntegramente en GPU sin lectura de píxeles hacia CPU.
+
+### Principio de funcionamiento
+
+Una cuadrícula UV estática de 256×256 (65 536 puntos por canal) se instancia en el vertex shader, que muestrea directamente la textura del `ofVideoPlayer` activo. La profundidad Z se deduce de la luminancia del píxel muestreado (modo `Luminance`), de una máscara PDJV cuando está disponible (modo `PdjvMask`), o de la combinación de ambos (modo `Hybrid`). No hay lectura GPU→CPU por fotograma ni actualizaciones del VBO.
+
+Cada canal mantiene cámara independiente y buffer de retroalimentación opcional. Los dos grupos de presentación (canales 0–3 en ventana A, canales 4–7 en ventana B) conservan el orden ICUIXIAN.
+
+### Integración PDJV
+
+Cuando se proporciona un paquete `.pdjv` en `videoPointCloud.pdjvPackagePath`, el runtime carga máscaras y profundidades por jugador. Si el paquete no está disponible o no corresponde al clip activo, el sistema cae en modo `Luminance` sin interrumpir la reproducción.
+
+### Presets disponibles
+
+| Preset | Índice | Descripción |
+|---|---|---|
+| Luminance Relief | 0 | Relieve de luminancia — puntos blancos con profundidad derivada del brillo |
+| Player Extraction | 1 | Extracción de jugadores — puntos coloreados con máscara PDJV |
+| Hybrid Stadium Field | 2 | Campo de estadio híbrido — luminancia para el campo, máscara para los cuerpos |
+
+### Configuración en `settings.json`
+
+```jsonc
+"videoPointCloud": {
+    "enabled": true,
+    "qualityTier": "Installation",  // "Draft" | "Preview" | "Installation"
+    "gridWidth": 256,
+    "gridHeight": 256,
+    "depthSource": "Luminance",     // "Luminance" | "PdjvMask" | "Hybrid"
+    "maskMode": "FullFrame",
+    "depthScale": 1.15,
+    "depthCenter": 0.5,
+    "pointSize": 2.2,
+    "luminanceFloor": 0.035,
+    "luminanceCeiling": 1.0,
+    "colorGain": 1.0,
+    "opacity": 0.9,
+    "zInvert": false,
+    "feedbackEnabled": false,
+    "feedbackDecay": 0.88,
+    "autoFit": true,
+    "cameraDistance": 1.8,
+    "cameraFov": 42,
+    "transitionDisplacement": 0.85,
+    "preset": 0,
+    "pdjvPackagePath": ""
+}
+```
+
+Un canal puede anular claves individuales bajo `channels[N].videoPointCloud`. Los valores no especificados se heredan de la sección global.
+
+### Control OSC
+
+| Dirección | Efecto |
+|---|---|
+| `/pdjv/vpc/<parámetro>` | Ajuste global del parámetro en todos los canales |
+| `/pdjv/channel/<N>/vpc/<parámetro>` | Ajuste por canal |
+| `/pdjv/vpc/reset` | Limpia el historial de retroalimentación (todos los canales) |
+| `/pdjv/channel/<N>/vpc/reset` | Limpia el historial de retroalimentación del canal N |
+
+---
+
 ### Lenguaje visual procedimental
 
 `VisualGenerator` añade ocho escenas sintéticas que pueden ocupar la pantalla sin vídeo o transformar el último fotograma capturado:
@@ -324,7 +401,7 @@ sequenceDiagram
     autonumber
     participant VD as VideoDirector
     participant CP as ClipPool
-    participant CH as 4 × Channel
+    participant CH as 8 × Channel
 
     rect rgb(18,18,18)
     Note over VD,CH: Programación independiente — por canal
@@ -339,7 +416,7 @@ sequenceDiagram
     Note over VD,CH: Evento compartido — cada 2-5 min
     VD->>CP: getSharedClip()
     CP-->>VD: clip compartido no usado recientemente
-    VD->>CH: beginShared() — mismo VideoPlan a los 4 canales
+    VD->>CH: beginShared() — mismo VideoPlan a los 8 canales
     CH-->>VD: reportReady() — clip cargado, inicio calculado
     VD->>VD: WaitingToStart — espera sharedStartDelay 0,35 s
     VD->>CH: Playing — sharedMediaSeconds_ avanza con el tiempo real
@@ -379,11 +456,9 @@ Un proceso ejecuta ocho pipelines. `ClipPool`, `VideoDirector`, `GlobalDirector`
 El `GlobalDirector` sincroniza la sensación temporal y el `VisualComposer` organiza capítulos en unísono, propagación, contrapunto o grupos 4 + 4.
 
 Distribución de monitores:
-- Ventana / ICUIXIAN A → canales 0–3
-- Ventana / ICUIXIAN B → canales 4–7
-- Cada enlace ordenador → controlador usa 1920×1080 a 60 Hz. La ventana se
-  divide en cuatro regiones de 480×1080 antes de que el controlador escale y
-  rote sus cuatro salidas.
+- Ventana A / ICUIXIAN A → canales 0–3 (layout 4×1, retrato 90°)
+- Ventana B / ICUIXIAN B → canales 4–7 (layout 2×2, horizontal 0°)
+- Cada enlace ordenador → controlador usa 1920×1080 a 60 Hz.
 
 ### Transmisión de datos OSC
 
@@ -442,10 +517,16 @@ El proceso transmite cuatro bundles UDP pequeños por canal y fotograma (~30 fps
 
 ### Motor de audio SuperCollider
 
-El motor comprende dos archivos:
+El motor comprende los siguientes archivos en `supercollider/`:
 
-- **`pdj_datamatics.scd`** — motor principal: infraestructura de buses, SynthDefs de infraestructura, sistema de formas, conductor de datos, secuenciador binario en cuadrícula, manejadores OSC y vigilancia de telemetría.
-- **`pdj_mode_voices.scd`** — voces escénicas específicas por modo: un SynthDef por cada uno de los 13 modos del ScoreMode, más `pdjKick`.
+| Archivo | Función |
+|---|---|
+| **`pdj_launcher.scd`** | Punto de entrada para el paquete de distribución. Encadena automáticamente `pdj_audio_config.scd` y `pdj_datamatics.scd`, imprime un informe de configuración completo y lanza un monitor de salud periódico (cada 2 minutos). Lanzado por `Start Audio.command`. |
+| **`pdj_audio_config.scd`** | Detección automática de Dante Virtual Soundcard. DANTE presente → 8 canales de salida a 48 kHz; DANTE ausente → rescate estéreo en dispositivo por defecto. Reinicia el servidor con las opciones correctas. Evaluar antes de `pdj_datamatics.scd`. |
+| **`pdj_datamatics.scd`** | Motor principal: infraestructura de buses, SynthDefs de infraestructura, conductor de datos (4 Hz), secuenciador binario en cuadrícula (0,42 s/paso), manejadores OSC y vigilancia de telemetría. Lee `~numSpeakers` definida por `pdj_audio_config.scd`. |
+| **`pdj_mode_voices.scd`** | Voces escénicas específicas por modo: un SynthDef por cada uno de los 13 modos del ScoreMode, más `pdjKick`. Cargado automáticamente por `pdj_datamatics.scd`. |
+| **`pdj_volumetric_compat.scd`** | Capa de compatibilidad OSC para el runtime volumétrico. Registra manejadores `/pdjv/channel/N/...` que mapean mensajes del runtime volumétrico a los buses de control del motor de audio. Permite que audio y runtime volumétrico coexistan en la misma red. |
+| **`data_matrix_functional_study.scd`** | Estudio funcional de referencia basado en el análisis del archivo `19 data.matrix.flac`. No forma parte del motor de instalación; sirve como vocabulario de partida y banco de pruebas de síntesis. |
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8","edgeLabelBackground":"#1a1a1a"}}}%%
@@ -553,9 +634,9 @@ La ControlApp es una ventana ImGui independiente accesible con la tecla `U`. Est
 
 ### Vista general
 
-![Vista general de los 4 canales](ui/ui_vista_general.png)
+![Vista general de los canales](ui/ui_vista_general.png)
 
-La pestaña **Overview** muestra el estado operativo de los cuatro canales simultáneamente. Cada columna presenta transporte (clip activo, Next / Pause / Stop, velocidad), modo visual activo, estado en vivo de los cuatro detectores de eventos (Collision, Ball, Crowd density, Leg distance) y telemetría CV cuadro a cuadro (Motion energy, Flow magnitude, Flow angle, Blobs, Contour). La barra superior expone la configuración OSC y el total de clips disponibles. La tecla `U` oculta toda la interfaz para la presentación.
+La pestaña **Overview** muestra el estado operativo de los ocho canales simultáneamente. Cada columna presenta transporte (clip activo, Next / Pause / Stop, velocidad), modo visual activo, estado en vivo de los cuatro detectores de eventos (Collision, Ball, Crowd density, Leg distance) y telemetría CV cuadro a cuadro (Motion energy, Flow magnitude, Flow angle, Blobs, Contour). La barra superior expone la configuración OSC y el total de clips disponibles. La tecla `U` oculta toda la interfaz para la presentación.
 
 ---
 
@@ -584,7 +665,7 @@ Los tres bloques de parámetros (Slow Motion, Fast Forward, Screen Clear) ajusta
 
 ![Editor de canal individual](ui/ui_editor_canal.png)
 
-La pestaña **Channel Editor** permite editar en detalle cualquiera de los cuatro canales. Cuatro bloques de parámetros:
+La pestaña **Channel Editor** permite editar en detalle cualquiera de los ocho canales. Cuatro bloques de parámetros:
 
 **IMAGE** — controla el shader B&W:
 
@@ -636,43 +717,76 @@ La sección **LIVE CV DATA** muestra flujo, ángulo, energía, blobs y contorno 
 
 ## Dependencias
 
+**Runtime de instalación principal (`src/`):**
+
 | Biblioteca | Función |
 |---|---|
-| openFrameworks | gráficos, reproducción de vídeo, gestión de ventanas |
+| openFrameworks 0.12.0 | gráficos, reproducción de vídeo, gestión de ventanas |
 | ofxOpenCv | wrapper de OpenCV para openFrameworks |
 | ofxCv | utilidades CV de alto nivel (CLD, Farneback, ContourFinder) |
 | ofxOsc | envío/recepción OSC |
 | ofxImGui | panel de control basado en ImGui |
 | OpenCV | sustracción de fondo (MOG2), bordes, flujo óptico |
 | SuperCollider | motor de síntesis de audio |
+| Dante Virtual Soundcard | dispositivo de audio virtual para la red DANTE (instalación) |
+| Dante Controller | enrutamiento de canales en la red DANTE (instalación) |
 | Syphon | (incluido) compartición de texturas GPU |
 | FMOD | (incluido) |
+
+**Analizador fuera de línea (`analyzer/`):**
+
+| Paquete | Función |
+|---|---|
+| Python 3.12+ | entorno de ejecución |
+| numpy, opencv-python | procesamiento de imagen y vídeo |
+| Ver `analyzer/requirements.txt` | lista completa de dependencias |
+
+**Runtime volumétrico (`volumetric/`):**
+
+| Biblioteca | Función |
+|---|---|
+| openFrameworks 0.12.0 | gráficos y ventanas |
+| ofxOsc | OSC de control |
+| ofxImGui | panel de control |
 
 ---
 
 ## Configuración
 
-Todos los parámetros en tiempo de ejecución están en `bin/data/settings.json`:
+Todos los parámetros en tiempo de ejecución están en `bin/data/settings.json`. En instalación, el sistema guarda además una copia de usuario en `~/Library/Application Support/PartituraDelJuego/settings.json` que prevalece sobre la del bundle.
 
 ```jsonc
 {
-    "osc": { "host": "localhost", "port": 9001 },
+    // Modo de salida activo
+    "outputMode": "dualWindow8",      // "dualWindow8" | "singleWindow"
+    "presentationFullscreen": true,
 
-    // Posiciones de ventana (coordenadas de pantalla)
-    "channels": [
-        { "x": 0,    "y": 0, "width": 1080, "height": 1920 },
-        { "x": 1080, "y": 0, "width": 1080, "height": 1920 },
-        { "x": 2160, "y": 0, "width": 1080, "height": 1920 },
-        { "x": 3240, "y": 0, "width": 1080, "height": 1920 }
+    // Posiciones de las dos ventanas de presentación
+    "presentationWindows": [
+        { "x": 0,    "y": 0, "width": 1920, "height": 1080, "layout": "4x1" },
+        { "x": 1920, "y": 0, "width": 1920, "height": 1080, "layout": "2x2" }
     ],
-    "controlWindow": { "x": 4320, "y": 0, "width": 1280, "height": 800 },
+
+    // Ventana de control
+    "controlWindow": { "x": 30, "y": 40, "width": 1400, "height": 900 },
+
+    // Clips de vídeo
+    "clips": {
+        "folder": "../../cortos",        // clips en retrato (canales 0–3)
+        "horizontalFolder": "horizontal" // clips horizontales (canales 4–7)
+    },
 
     "targetFPS": 30,
 
-    // Parámetros de visión artificial
+    // Transmisión OSC
+    "osc": { "host": "localhost", "port": 9001, "listenPort": 9002 },
+
+    // Visión artificial
     "cv": {
         "halfRes": true,
-        "flowWindowSize": 8,
+        "analysisEveryNFrames": 1,
+        "eightChannelEveryNFrames": 2,  // escalona el análisis entre canales en modo 8ch
+        "flowWindowSize": 6,
         "blobMinArea": 500,
         "blobMaxArea": 200000,
         "bgSubHistory": 120,
@@ -688,83 +802,165 @@ Todos los parámetros en tiempo de ejecución están en `bin/data/settings.json`
         "shortMin": 8,  "shortMax": 25,    // segundos
         "longMin": 30,  "longMax": 120,
         "sharedIntervalMin": 120, "sharedIntervalMax": 300,  // evento compartido
-        "sharedStartDelay": 0.35,   // segundos de espera para arranque sincronizado
-        "driftTolerance": 0.08      // tolerancia de deriva de posición normalizada
+        "sharedStartDelay": 0.35,
+        "driftTolerance": 0.08
+    },
+
+    // Compositor visual
+    "visualComposer": {
+        "enabled": true,
+        "seed": 0,             // 0 = semilla aleatoria por sesión; != 0 = reproducible
+        "bpm": 90.0,
+        "generatorProbability": 0.35,
+        "videoProbability": 0.45,
+        "organizationWeights": [0.2, 0.3, 0.35, 0.15],  // Unison, Propagation, Counterpoint, 4+4
+        "disabledGenerators": [11, 14]                   // lista de generadores excluidos del programa
+    },
+
+    // Nube de puntos de vídeo por GPU
+    "videoPointCloud": {
+        "enabled": true,
+        "qualityTier": "Installation",
+        "gridWidth": 256, "gridHeight": 256,
+        "depthSource": "Luminance",
+        "pointSize": 2.2,
+        "feedbackEnabled": false,
+        "preset": 0,
+        "pdjvPackagePath": ""   // dejar vacío si no hay paquete PDJV
+    },
+
+    // Configuración de los controladores ICUIXIAN
+    "videoWallController": {
+        "brand": "ICUIXIAN", "model": "0104-XZ", "asin": "B0DM98NVSH",
+        "controllers": 2,
+        "inputWidth": 1920, "inputHeight": 1080, "refreshHz": 60.0,
+        "wallA": { "layout": "4x1", "panelOrientation": "portrait",   "rotationDegrees": 90 },
+        "wallB": { "layout": "2x2", "panelOrientation": "landscape",  "rotationDegrees": 0  }
+    },
+
+    // Prueba de rendimiento
+    "performanceTest": {
+        "durationSeconds": 600.0,
+        "thresholds": {
+            "minimumFps": 29.0,
+            "p95FrameMs": 38.0,
+            "maximumLatePercent": 0.5,
+            "stallFrameMs": 100.0,
+            "maximumMemoryGrowthMB": 256.0
+        }
     }
 }
 ```
 
-**Presets de distribución incluidos:**
+**Layouts de ventana predefinidos (intercambiables en `settings.json`):**
 
 | Clave | Uso |
 |---|---|
-| `channels` (array activo) | posiciones de ventana actuales |
-| `_testLayout` | desarrollo — 4 ventanas pequeñas en una pantalla |
-| `_installationLayout` | instalación — 4 × 1080×1920 en vertical |
-| `_installationControl` | ventana de control en instalación |
+| `presentationWindows` (activo) | Dos escritorios ICUIXIAN, 1920×1080 cada uno |
+| `_testLayout` | Desarrollo — 4 ventanas pequeñas (270×480) en pantalla integrada |
+| `_testSingleWindow` | Prueba en portátil — ventana única 1920×1080 con 4 segmentos |
+| `_installationLayout` | 4 ventanas verticales 1080×1920 para configuración legacy |
+| `singleWindow` | Modo de una ventana: 3840×2160 para cuatro canales lado a lado |
 
-Para ocho pantallas, usar `outputMode: "dualWindow8"`. El botón **Configure
-ICUIXIAN outputs** busca dos salidas externas independientes, cambia ambas a
-1920×1080 a 60 Hz y guarda sus posiciones en `presentationWindows`. Cada
-ventana entrega cuatro segmentos al controlador correspondiente. Es necesario
-reiniciar la aplicación después de configurarlas.
-
-La ControlApp (tecla `U`) da acceso en vivo a vídeo, compositor, organización espacial y parámetros por canal sin recompilar.
+La ControlApp (tecla `U`) da acceso en vivo a vídeo, compositor, nube de puntos, organización espacial y parámetros por canal sin recompilar.
 
 ---
 
 ## Ejecución
 
-### Desarrollo (una máquina, 4 canales)
+### Desarrollo (una máquina, ventanas de prueba)
 
 ```bash
-# Editar settings.json: sustituir "channels" por _testLayout para ventanas pequeñas
+# Editar settings.json: sustituir el array "channels" por _testLayout
+# para obtener ventanas pequeñas en la pantalla integrada
 make && bin/Partitura_del_Juego
+```
 
-# Audio — iniciar SuperCollider después de que oF esté en marcha
-# Abrir supercollider/pdj_datamatics.scd
-# Cmd+Enter sobre el bloque exterior (carga pdj_mode_voices.scd automáticamente)
-# OSC host/puerto debe coincidir con settings.json (por defecto localhost:9001)
+**Audio en desarrollo — IDE de SuperCollider:**
 
-# Flujo de audio sintético sin oF
+```supercollider
+// 1. Evaluar pdj_audio_config.scd primero (seleccionar todo -> Cmd+Return).
+//    Esperar "Server ready" en Post Window.
+// 2. Evaluar pdj_datamatics.scd (seleccionar todo -> Cmd+Return).
+//    Esperar "PDJ Datamatics — listening OSC UDP :9001".
+// NO presionar Boot Server (Cmd+B) manualmente;
+// pdj_audio_config.scd arranca el servidor con el dispositivo correcto.
+
+// Flujo de audio sintético sin oF:
 ~testOsc.play;
 
-# Apagar audio
+// Apagar audio:
 ~shutdown.();
 ```
 
-### Instalación (una máquina, 8 canales)
+### Paquete de distribución (macOS arm64)
+
+El paquete distribuible se construye con:
 
 ```bash
-# settings.json
-# outputMode: "dualWindow8"
-# presentationWindows: dos escritorios ICUIXIAN de 1920x1080
-# osc.host: localhost
-make && bin/Partitura_del_Juego
-
-# SuperCollider
-# pdj_datamatics.scd ya usa ~numChannels = 8
-# Cmd+Enter
+scripts/package_macos_arm64.sh
+# Genera dist/Partitura_del_Juego-macOS-arm64.zip
 ```
 
-**Orden de arranque:** encender ambas cadenas de pantallas/controladores, iniciar SuperCollider y después la aplicación. La única ControlApp gobierna los ocho canales.
+El paquete incluye la aplicación firmada ad-hoc, la biblioteca de 48 clips, los shaders y los archivos de SuperCollider con los scripts `Start Audio.command` y `Check Audio.command` listos para doble clic. Ver `distribution/README-macOS.md` para instrucciones de distribución y prueba.
+
+### Instalación completa (una máquina, 8 canales)
+
+```bash
+# settings.json activo:
+#   outputMode: "dualWindow8"
+#   presentationWindows: dos escritorios a 1920x1080
+#   osc.host: localhost
+make && bin/Partitura_del_Juego
+```
+
+**Audio en instalación — script de arranque:**
+
+```bash
+# Doble clic en Start Audio.command (en el paquete distribuido)
+# o en el IDE:
+#   1. Activar Dante Virtual Soundcard (TX=8, RX=2, 48 kHz, latencia 1 ms)
+#   2. Evaluar pdj_audio_config.scd
+#   3. Evaluar pdj_datamatics.scd
+```
+
+El script `Start Audio.command` ejecuta `pdj_launcher.scd`, que encadena automáticamente `pdj_audio_config.scd` y `pdj_datamatics.scd` en el orden correcto. Imprime un informe de configuración completo incluyendo modo DANTE, dispositivo, canales, tasa de muestreo y posiciones de bocinas. Deja la ventana de terminal abierta durante toda la instalación; cada dos minutos imprime una línea de salud del servidor.
+
+El script `Check Audio.command` escanea el sistema sin arrancar el motor: detecta DANTE, lista dispositivos de audio y verifica conectividad de red. Usar antes de cada sesión para diagnosticar la configuración DANTE.
+
+**Orden de arranque:** multicontactos → pantallas → unidades ICUIXIAN → ordenador → SuperCollider (script o IDE) → aplicación. Apagado en orden inverso; detener SuperCollider siempre con `~shutdown.()` antes de deshabilitar Dante Virtual Soundcard.
 
 #### Ajuste de los controladores ICUIXIAN
 
-La configuración está dirigida al ICUIXIAN `0104-XZ` (ASIN
-`B0DM98NVSH`). En cada unidad:
+La configuración usa dos unidades ICUIXIAN `0104-XZ` (ASIN `B0DM98NVSH`) con disposición mixta:
 
-1. Conectar una salida independiente del Mac a `HDMI IN`.
-2. Conectar `HDMI OUT 1–4` a las cuatro pantallas en el orden físico.
-3. Seleccionar el mosaico `4×1` y rotación de `90°` para las pantallas en
-   vertical. Si la instalación física queda invertida, usar `270°`.
-4. Desactivar el mirroring de macOS y usar escritorio extendido.
-5. En la ControlApp pulsar **Configure ICUIXIAN outputs** y reiniciar.
+**Controlador A — muro de retratos (Ventana A, canales 0–3):**
 
-La ficha técnica limita los modos de mosaico con rotación a entrada
-1920×1080; 3840×2160 a 30 Hz sólo es válido para modos sin esa rotación. El
-botón rechaza configuraciones donde macOS no exponga 1080p60 en ambos
-controladores.
+1. Conectar la primera salida del Mac a `HDMI IN` de la unidad A.
+2. Conectar `HDMI OUT 1–4` a los cuatro paneles en retrato, de izquierda a derecha.
+3. Seleccionar mosaico `4×1` y rotación `90°`. Si los paneles quedan invertidos, usar `270°`.
+
+**Controlador B — muro horizontal (Ventana B, canales 4–7):**
+
+1. Conectar la segunda salida del Mac a `HDMI IN` de la unidad B.
+2. Conectar `HDMI OUT 1–4` a los cuatro paneles horizontales en el orden del mosaico: fila superior izquierda (OUT 1), fila superior derecha (OUT 2), fila inferior izquierda (OUT 3), fila inferior derecha (OUT 4).
+3. Seleccionar mosaico `2×2` y rotación `0°`.
+
+**Pasos comunes a ambas unidades:**
+
+4. Desactivar el mirroring de macOS y usar escritorio extendido (dos escritorios externos a 1920×1080 a 60 Hz).
+5. En la ControlApp pulsar **Configure Mixed Wall (Wall A + B)** para detectar automáticamente ambas salidas y guardar sus posiciones en `presentationWindows`. Reiniciar la aplicación.
+
+La ficha técnica limita los modos de mosaico con rotación a entrada 1920×1080; 3840×2160 a 30 Hz sólo es válido para modos sin esa rotación. El botón rechaza configuraciones donde macOS no exponga 1080p60 en ambos controladores.
+
+El archivo `bin/data/settings.json` refleja la disposición activa en `videoWallController`:
+
+```json
+"videoWallController": {
+    "wallA": { "layout": "4x1", "panelOrientation": "portrait",   "rotationDegrees": 90 },
+    "wallB": { "layout": "2x2", "panelOrientation": "landscape",  "rotationDegrees": 0  }
+}
+```
 
 #### Prueba de rendimiento
 
@@ -796,7 +992,7 @@ lentos. Los límites y la duración se ajustan en
 
 ![Mapa de conexiones de la instalación](img/mapa.png)
 
-El mapa incluido corresponde al diseño físico anterior de dos ordenadores. Para la versión actual, sustituir los dos nodos de ordenador por una máquina con dos salidas hacia dos controladores ICUIXIAN; cada controlador distribuye cuatro segmentos a cuatro pantallas.
+El mapa corresponde al diseño de referencia del sistema. Una máquina con dos salidas HDMI hacia dos controladores ICUIXIAN; cada controlador distribuye cuatro segmentos a cuatro pantallas. ICUIXIAN A distribuye cuatro tiras de retrato (4×1, 90°); ICUIXIAN B distribuye cuatro pantallas horizontales en mosaico (2×2, 0°). El audio sale del Mac por Dante Virtual Soundcard hacia la unidad DANTE 5 del sistema Midas.
 
 | Color | Tipo de línea |
 |---|---|
@@ -808,29 +1004,31 @@ El mapa incluido corresponde al diseño físico anterior de dos ordenadores. Par
 
 | Cant. | Equipo | Función en el sistema |
 |---|---|---|
-| 8 | Monitor / pantalla 1080 × 1920 (9:16, montaje en vertical) | Una pantalla por canal — salida de `GraphicScore`. Rotadas a modo retrato desde el sistema operativo |
-| 1 | Ordenador con dos salidas HDMI independientes | Entrega dos señales 1920×1080 a 60 Hz y ejecuta ocho canales a 30 fps |
-| 2 | ICUIXIAN 0104-XZ, ASIN B0DM98NVSH | Cada unidad divide una entrada 1080p60 en cuatro salidas verticales |
-| 1 | Consola / sistema de audio Midas | Salida y mezcla del motor SuperCollider hacia el sistema de sala |
-| 1 | Modem / router con switch Gigabit | Red para audio/control cuando el sistema Midas lo requiere |
-| 10 | Cable HDMI | Dos enlaces ordenador→ICUIXIAN y ocho enlaces ICUIXIAN→pantallas |
-| 1+ | Cable Ethernet Cat5e/Cat6 | Enlace hacia el sistema Midas/control de sala |
-| 2 | Multicontacto / regleta a 120 V | Un multicontacto por banco de cuatro pantallas |
+| 4 | Monitor / pantalla 1080×1920 (9:16, montaje en vertical) | Canales 0–3 (Muro A). Distribuidos por ICUIXIAN A en modo 4×1 con rotación 90° |
+| 4 | Monitor / pantalla 1920×1080 (16:9, montaje horizontal) | Canales 4–7 (Muro B). Distribuidos por ICUIXIAN B en modo 2×2 sin rotación |
+| 1 | Ordenador Mac arm64 con dos salidas HDMI independientes | Entrega dos señales 1920×1080 a 60 Hz y ejecuta ocho canales a 30 fps |
+| 1 | ICUIXIAN 0104-XZ (Muro A), ASIN B0DM98NVSH | Divide la entrada 1080p60 en cuatro tiras verticales de retrato |
+| 1 | ICUIXIAN 0104-XZ (Muro B), ASIN B0DM98NVSH | Divide la entrada 1080p60 en cuatro pantallas en mosaico 2×2 horizontal |
+| 1 | Consola / sistema de audio Midas con unidad DANTE 5 | Recibe 8 canales via DANTE desde el Mac y los enruta a los altavoces de sala |
+| 1 | Switch Gigabit con acceso a red DANTE | Red para audio DANTE y control cuando el sistema Midas lo requiere |
+| 10 | Cable HDMI | Dos enlaces Mac→ICUIXIAN y ocho enlaces ICUIXIAN→pantallas |
+| 1+ | Cable Ethernet Cat5e/Cat6 | Enlace hacia el switch de la red DANTE |
+| 2 | Multicontacto / regleta | Un multicontacto por banco de pantallas |
 | 1 | Teclado/ratón o control remoto | Acceso a la ControlApp (tecla `U`) |
 
-Opcionales según sala: extensiones eléctricas, canaletas o cinta gaffer para el cableado, y un monitor auxiliar para la ControlApp (el `settings.json` de instalación ya reserva una ventana de control de 1280 × 800).
+Opcionales según sala: extensiones eléctricas, canaletas o cinta gaffer para el cableado, y un monitor auxiliar para la ControlApp (el `settings.json` de instalación ya reserva una ventana de control de 1400 × 900).
 
 ### Descripción del setup
 
-**Reparto de vídeo.** La ventana A contiene canales 0–3 y alimenta ICUIXIAN A; la ventana B contiene canales 4–7 y alimenta ICUIXIAN B. `presentationWindows` ajusta posición y tamaño dentro del escritorio extendido.
+**Reparto de vídeo.** La ventana A (canales 0–3) alimenta ICUIXIAN A configurado como 4×1 con rotación 90°; cada segmento de 480×1080 px se escala y rota al panel vertical correspondiente. La ventana B (canales 4–7) alimenta ICUIXIAN B configurado como 2×2; cada cuadrante de 960×540 px se escala al panel horizontal correspondiente. `presentationWindows` en `settings.json` ajusta posición y tamaño de cada ventana dentro del escritorio extendido.
 
-**Reloj.** `GlobalDirector`, `VideoDirector` y `VisualComposer` viven en el mismo proceso. Las dos ventanas comparten contexto GL y guard de fotograma, por lo que no necesitan sincronización de red.
+**Reloj.** `GlobalDirector`, `VideoDirector` y `VisualComposer` viven en el mismo proceso. Las dos ventanas comparten contexto OpenGL y guard de fotograma, por lo que no necesitan sincronización de red.
 
-**Audio.** SuperCollider corre en una sola máquina y recibe el OSC de los ocho canales. Su salida va al sistema Midas a través del enlace de red del diagrama (o por interfaz de audio si se prefiere salida analógica), y desde ahí al sistema de sala. La máquina que sostiene el audio es la única que necesita `pdj_datamatics.scd` cargado, con `~numChannels = 8` y `~channelBases` ampliado a ocho canales.
+**Audio.** SuperCollider corre en el mismo Mac y recibe OSC de los ocho canales. `pdj_audio_config.scd` detecta automáticamente Dante Virtual Soundcard; si está presente, configura 8 canales de salida a 48 kHz hacia la unidad DANTE 5. Dante Controller enruta las salidas DVS 1–8 a los canales D3-1–D3-8 de la sala. En ausencia de DANTE, el sistema cae en rescate estéreo sin cambios de código. Ver `docs/AUDIO_MULTICHANNEL_ES.md` para la configuración completa de DANTE, enrutamiento y calibración de altavoces.
 
-**Eléctrico.** Ambos bancos deben partir de la misma fase de 120 V para evitar bucles de masa. Dimensionar el circuito para ocho pantallas, dos controladores y un ordenador.
+**Eléctrico.** Ambos bancos de pantallas deben partir de la misma fase para evitar bucles de masa. Dimensionar el circuito para ocho pantallas, dos controladores y un ordenador.
 
-**Orden de encendido.** Multicontactos → pantallas → ICUIXIAN → ordenador → SuperCollider → aplicación. Apagado en orden inverso.
+**Orden de encendido.** Multicontactos → pantallas → unidades ICUIXIAN → ordenador → SuperCollider (`Start Audio.command` o IDE) → aplicación. Apagado en orden inverso: detener SuperCollider con `~shutdown.()` antes de deshabilitar Dante Virtual Soundcard.
 
 ---
 
@@ -847,3 +1045,43 @@ Cada estructura sostiene uno o dos paneles en vertical, sujetos por bridas o abr
 La segunda vista muestra la circulación resultante y el volumen cilíndrico negro que concentra la parte técnica del montaje: dentro se ocultan los ordenadores, el multicontacto, el router y el recogido de cables, que suben por los tubos hasta cada panel. La sala se mantiene en penumbra sin iluminación añadida —la única fuente de luz son las propias pantallas—, y el suelo se deja libre de cableado visible.
 
 Nota sobre el ancho lógico: la cifra de 8640 px (8 × 1080) descrita en la arquitectura es la resolución total del sistema, no una dimensión física continua. Cada canal es una imagen autónoma y completa, por lo que el reparto espacial de los paneles puede adaptarse a la planta de cada sala sin modificar el software.
+
+---
+
+## Análisis fuera de línea (`analyzer/`)
+
+El analizador Python procesa los clips de vídeo fuera de línea y genera paquetes PDJV que el runtime principal puede usar para enriquecer la nube de puntos.
+
+```bash
+cd analyzer
+pip install -r requirements.txt
+
+# Analizar un clip y generar el paquete PDJV
+python scripts/analyze_clip.py <ruta_del_clip>
+
+# Exportar datos de referencia (golden)
+python scripts/export_golden.py
+
+# Validar el paquete generado
+python scripts/validate_package.py <ruta.pdjv>
+```
+
+El formato PDJV está completamente documentado en `docs/pdjv/PDJV_FORMAT.md`. La versión activa en producción es v1 (frozen). Los paquetes v0 siguen siendo legibles. Los paquetes de producción no deben contener imágenes de muestra (thumbnail) — el analizador genera previsualizaciones únicamente bajo `analyzer/output/`.
+
+---
+
+## Runtime volumétrico (`volumetric/`)
+
+`volumetric/` es un runtime independiente que reproduce paquetes PDJV sin decodificar vídeo fuente ni usar OpenCV. No forma parte del runtime de instalación principal.
+
+```bash
+cd volumetric
+make -j8
+cd bin && ./volumetric.app/Contents/MacOS/volumetric
+```
+
+Requiere openFrameworks 0.12.0 en la ruta definida por `OF_ROOT` en `volumetric/config.make`. Addons: `ofxOsc`, `ofxImGui`. OpenGL 4.1, sin compute shaders.
+
+El modo de salida `dualWindow8` genera dos ventanas de presentación 1920×1080 (grupos A/B con FBOs HDR y de retroalimentación independientes) más una ventana de control. OSC entrante en el puerto 9002: `/pdjv/generator`, `/pdjv/preset`, `/pdjv/play`.
+
+El archivo `pdj_volumetric_compat.scd` (en `supercollider/`) registra manejadores OSC que permiten que el motor de audio reciba mensajes del runtime volumétrico en los mismos buses de control que usa el runtime de instalación principal.

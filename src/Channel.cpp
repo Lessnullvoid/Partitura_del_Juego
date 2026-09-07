@@ -1,9 +1,16 @@
 #include "Channel.h"
+#include "VideoPointCloudGenerator.h"
 
-// Analysis FBO dimensions: 1/4 of a 1080x1920 display.
-// readToPixels at this size costs ~0.5 MB vs ~8 MB at full res (16x faster).
+// Dimensiones del FBO de análisis: 1/4 de una visualización 1080x1920.
+// readToPixels a este tamaño cuesta ~0.5 MB frente a ~8 MB a resolución completa (16x más rápido).
 static constexpr int kCvW = 270;
 static constexpr int kCvH = 480;
+
+// Aplastamiento de nivel de negro aplicado a mono.frag en eventos de inversión de color del generador.
+// Aplasta el brillo de fondo (típicamente 3-8% de luminancia de feedback/bloom) a
+// negro puro antes del blend-invert, de modo que el fondo se invierta a
+// un blanco verdadero 255,255,255.  Subir si el brillo es más intenso de lo esperado.
+static constexpr float kInvertBlackLevel = 0.07f;
 
 namespace {
 class ScopedChannelTimer {
@@ -42,7 +49,7 @@ void Channel::setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const
     pool_ = pool;
     osc_  = osc;
 
-    // Full-res display FBO — B&W shader renders here
+    // FBO de visualización a resolución completa — el shader B&W renderiza aquí
     ofFbo::Settings fs;
     fs.width          = w;
     fs.height         = h;
@@ -51,7 +58,7 @@ void Channel::setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const
     fs.numSamples     = 0;
     bwFbo_.allocate(fs);
 
-    // Small analysis FBO — only read back to CPU for CV
+    // FBO pequeño de análisis — solo se lee de vuelta a CPU para CV
     ofFbo::Settings cvfs;
     cvfs.width          = kCvW;
     cvfs.height         = kCvH;
@@ -60,20 +67,89 @@ void Channel::setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const
     cvfs.numSamples     = 0;
     cvFbo_.allocate(cvfs);
 
-    // CVPipeline sees the small FBO pixels directly (halfRes=false, already at kCvW x kCvH)
+    // CVPipeline ve los píxeles del FBO pequeño directamente (halfRes=false, ya a kCvW x kCvH)
     CVParams cvpAnalysis = cvp;
     cvpAnalysis.halfRes  = false;
     cv_.setup(kCvW, kCvH, cvpAnalysis);
-    cv_.setDisplaySize(w, h);   // keeps getAnalysisScale() = (4, 4)
+    cv_.setDisplaySize(w, h);   // mantiene getAnalysisScale() = (4, 4)
 
     score_.setup(w, h);
-    if (composer_ && composer_->params().enabled) generator_.setup(w, h);
+    generator_.setup(w, h);
+    videoPointCloud_.setup(vpcSettings_);
+    pdjvBridge_.setup(vpcSettings_.pdjvPackagePath);
+
+    // Preasigna buffers de staging para el hilo trabajador de CV.
+    cvPixelShare_.allocate(kCvW, kCvH, OF_PIXELS_GRAY);
+    grayPixels_.allocate(kCvW, kCvH, OF_PIXELS_GRAY);
+
+    // Lanza el trabajador de CV en un hilo aparte.
+    {
+        std::lock_guard<std::mutex> lock(cvMutex_);
+        cvRunning_ = true;
+        cvPending_ = false;
+    }
+    cvThread_ = std::thread(&Channel::cvWorkerLoop, this);
 
     if (videoDir_) {
         applyPendingVideoPlan();
     } else {
         loadNextClip();
     }
+}
+
+Channel::~Channel() {
+    {
+        std::lock_guard<std::mutex> lock(cvMutex_);
+        cvRunning_ = false;
+    }
+    cvCv_.notify_one();
+    if (cvThread_.joinable())
+        cvThread_.join();
+}
+
+// Se ejecuta en cvThread_. Espera datos de píxel publicados por el hilo principal,
+// llama a cv_.update() bajo cvComputeMutex_ y publica el resultado.
+void Channel::cvWorkerLoop() {
+    while (true) {
+        ofPixels localPixels;
+        {
+            std::unique_lock<std::mutex> lock(cvMutex_);
+            cvCv_.wait(lock, [this]{ return cvPending_ || !cvRunning_; });
+            if (!cvRunning_) break;
+            localPixels = cvPixelShare_;    // copia rápida (~3 µs) mientras está bloqueado
+            cvPending_ = false;
+        }
+
+        // Ejecuta el pipeline OpenCV fuera del lock de programación para que el
+        // hilo principal pueda publicar los píxeles del siguiente fotograma de inmediato.
+        CVData localResult;
+        {
+            std::lock_guard<std::mutex> computeLock(cvComputeMutex_);
+            cv_.update(localPixels);
+            localResult = cv_.getData();
+        }
+
+        {
+            std::lock_guard<std::mutex> dataLock(cvDataMutex_);
+            cvDataReady_ = std::move(localResult);
+        }
+        cvResultReady_.store(true, std::memory_order_release);
+    }
+}
+
+// Se llama desde el hilo principal cuando cambia un clip. Bloquea brevemente si
+// el trabajador está en cv_.update() (como máximo un fotograma CV ≈ 2-5 ms).
+void Channel::resetCvAsync() {
+    {
+        std::lock_guard<std::mutex> computeLock(cvComputeMutex_);
+        cv_.reset();
+    }
+    {
+        std::lock_guard<std::mutex> lock(cvMutex_);
+        cvPending_ = false;
+    }
+    cvResultReady_.store(false, std::memory_order_relaxed);
+    cvPubData_ = CVData{};
 }
 
 void Channel::loadNextClip() {
@@ -97,19 +173,18 @@ void Channel::loadNextClip() {
     if (!ok) { ofLogError("Channel") << "[" << idx_ << "] Failed: " << path; return; }
     player_.setLoopState(OF_LOOP_NORMAL);
     player_.play();
-    // Restore the current effective speed immediately so the first loop iteration
-    // plays at the right rate even before the next update() call.
+    // Restaura de inmediato la velocidad efectiva actual para que la primera
+    // iteración del bucle reproduzca a la tasa correcta incluso antes del siguiente update().
     if (dir_) {
         float eff = baseSpeed_ * dir_->getSpeedMultiplier();
         player_.setSpeed(eff);
     } else {
         player_.setSpeed(baseSpeed_);
     }
-    cv_.reset();
-    score_.onClipChange();  // flash strobe on every clip transition
+    resetCvAsync();
+    score_.onClipChange();  // estroboscopio en cada transición de clip
     videoRevision_++;
-    CVData& data = const_cast<CVData&>(cv_.getData());
-    sendOscSnapshot(data);  // announce the cut immediately, then repeat every frame
+    sendOscSnapshot(cvPubData_);  // anuncia el corte de inmediato y luego se repite cada fotograma
     ofLogNotice("Channel") << "[" << idx_ << "] Playing: " << ofFilePath::getFileName(path);
 }
 
@@ -147,11 +222,10 @@ bool Channel::loadVideoPlan(const VideoPlan& plan) {
     if (plan.shared) player_.setPaused(true);
     configureLoadedPlan();
 
-    cv_.reset();
+    resetCvAsync();
     score_.onClipChange();
     videoRevision_++;
-    CVData& data = const_cast<CVData&>(cv_.getData());
-    sendOscSnapshot(data);
+    sendOscSnapshot(cvPubData_);
     if (composer_ && composer_->params().enabled && !plan.shared)
         composer_->acknowledgeVideoStarted(idx_);
     ofLogNotice("Channel") << "[" << idx_ << "] "
@@ -210,23 +284,180 @@ const ChapterState* Channel::composerState() const {
     return &composer_->stateFor(idx_);
 }
 
+void Channel::configureVideoPointCloud(const VideoPointCloudSettings& settings) {
+    vpcSettings_ = settings;
+}
+
+void Channel::populateVpcOsc(CVData& data) const {
+    data.vpcEnabled = vpcSettings_.enabled ? 1 : 0;
+    data.vpcDepthSource = static_cast<int>(vpcSettings_.depthSource);
+    data.vpcMaskMode = static_cast<int>(vpcSettings_.maskMode);
+    data.vpcPreset = vpcSettings_.preset;
+    data.vpcGridWidth = vpcSettings_.gridWidth;
+    data.vpcGridHeight = vpcSettings_.gridHeight;
+    data.vpcDepthScale = vpcSettings_.depthScale;
+    data.vpcPointSize = vpcSettings_.pointSize;
+    data.vpcLuminanceFloor = vpcSettings_.luminanceFloor;
+    data.vpcColorGain = vpcSettings_.colorGain;
+    data.vpcCameraYaw = vpcSettings_.cameraYaw;
+    data.vpcCameraDistance = vpcSettings_.cameraDistance;
+    data.vpcFeedbackEnabled = vpcSettings_.feedbackEnabled ? 1 : 0;
+    data.vpcFeedbackDecay = vpcSettings_.feedbackDecay;
+}
+
+VideoGeneratorContext Channel::buildVideoGeneratorContext() const {
+    VideoGeneratorContext ctx;
+    ctx.videoTexture = player_.isLoaded() ? &player_.getTexture() : nullptr;
+    ctx.videoWidth = player_.getWidth();
+    ctx.videoHeight = player_.getHeight();
+    ctx.playbackTime = player_.isLoaded() ? player_.getPosition() * player_.getDuration() : 0.0;
+    ctx.frameNew = player_.isFrameNew();
+    ctx.channelIndex = idx_;
+    ctx.analysisFrame = pdjvView_.valid ? &pdjvView_ : nullptr;
+    if (pdjvMaskTex_.isAllocated())
+        ctx.maskTexture = &pdjvMaskTex_;
+    if (pdjvDepthTex_.isAllocated())
+        ctx.depthTexture = &pdjvDepthTex_;
+    if (const ChapterState* state = composerState()) {
+        if (state->content == ContentType::Video) {
+            if (state->stage == TemporalStage::Appearance)
+                ctx.transitionAmount = 1.f - state->stageProgress;
+            else if (state->stage == TemporalStage::Dissolution)
+                ctx.transitionAmount = state->stageProgress;
+        } else if (state->content == ContentType::Transition) {
+            ctx.transitionAmount = state->stageProgress;
+        }
+    }
+    return ctx;
+}
+
+void Channel::drawVideoPointCloud(int x, int y, int segW, int segH) {
+    const auto ctx = buildVideoGeneratorContext();
+    videoPointCloud_.draw(ctx, ofRectangle(x, y, segW, segH));
+}
+
+bool Channel::applyVpcOscParam(const std::string& param,
+                               const ofxOscMessage& msg) {
+    if (msg.getNumArgs() < 1)
+        return false;
+
+    auto floatArg = [&]() { return msg.getArgAsFloat(0); };
+    auto intArg = [&]() { return msg.getArgAsInt32(0); };
+    if (param == "enabled")
+        vpcSettings_.enabled = intArg() != 0;
+    else if (param == "depthSource")
+        vpcSettings_.depthSource = static_cast<PointCloudDepthSource>(
+            ofClamp(intArg(), 0, 2));
+    else if (param == "maskMode")
+        vpcSettings_.maskMode = static_cast<PointCloudMaskMode>(
+            ofClamp(intArg(), 0, 2));
+    else if (param == "preset")
+        vpcSettings_.applyPreset(ofClamp(intArg(), 0, 2));
+    else if (param == "gridWidth")
+        vpcSettings_.gridWidth = ofClamp(intArg(), 64, 512);
+    else if (param == "gridHeight")
+        vpcSettings_.gridHeight = ofClamp(intArg(), 64, 512);
+    else if (param == "depthScale")
+        vpcSettings_.depthScale = ofClamp(floatArg(), 0.f, 5.f);
+    else if (param == "depthCenter")
+        vpcSettings_.depthCenter = ofClamp(floatArg(), 0.f, 1.f);
+    else if (param == "pointSize")
+        vpcSettings_.pointSize = ofClamp(floatArg(), 0.5f, 8.f);
+    else if (param == "luminanceFloor")
+        vpcSettings_.luminanceFloor = ofClamp(floatArg(), 0.f, 1.f);
+    else if (param == "luminanceCeiling")
+        vpcSettings_.luminanceCeiling = ofClamp(floatArg(), 0.f, 1.f);
+    else if (param == "gamma")
+        vpcSettings_.gamma = ofClamp(floatArg(), 0.1f, 4.f);
+    else if (param == "colorGain")
+        vpcSettings_.colorGain = ofClamp(floatArg(), 0.f, 4.f);
+    else if (param == "opacity")
+        vpcSettings_.opacity = ofClamp(floatArg(), 0.f, 1.f);
+    else if (param == "zInvert")
+        vpcSettings_.zInvert = intArg() != 0;
+    else if (param == "feedbackEnabled")
+        vpcSettings_.feedbackEnabled = intArg() != 0;
+    else if (param == "feedbackDecay")
+        vpcSettings_.feedbackDecay = ofClamp(floatArg(), 0.f, 0.995f);
+    else if (param == "feedbackScale")
+        vpcSettings_.feedbackScale = ofClamp(floatArg(), 0.5f, 1.5f);
+    else if (param == "feedbackOffsetX")
+        vpcSettings_.feedbackOffsetX = ofClamp(floatArg(), -500.f, 500.f);
+    else if (param == "feedbackOffsetY")
+        vpcSettings_.feedbackOffsetY = ofClamp(floatArg(), -500.f, 500.f);
+    else if (param == "feedbackRotation")
+        vpcSettings_.feedbackRotation = ofClamp(floatArg(), -45.f, 45.f);
+    else if (param == "feedbackGain")
+        vpcSettings_.feedbackGain = ofClamp(floatArg(), 0.f, 1.f);
+    else if (param == "cameraYaw")
+        vpcSettings_.cameraYaw = ofClamp(floatArg(), -180.f, 180.f);
+    else if (param == "cameraPitch")
+        vpcSettings_.cameraPitch = ofClamp(floatArg(), -89.f, 89.f);
+    else if (param == "cameraDistance")
+        vpcSettings_.cameraDistance = ofClamp(floatArg(), 0.25f, 10.f);
+    else
+        return false;
+
+    videoPointCloud_.settings() = vpcSettings_;
+    return true;
+}
+
+void Channel::resetVideoPointCloudFeedback() {
+    videoPointCloud_.reset();
+}
+
 void Channel::populateGeneratorOsc(CVData& data) const {
     data.generatorActive = 0;
+    data.composerContent = -1;
     data.generatorMode = -1;
     data.generatorRevision = 0;
     data.organizationMode = 0;
     data.screenRole = idx_ % 8;
     data.generatorStage = 0;
     data.generatorStageProgress = 0.f;
+    data.generatorChapterPhase = 0.f;
     data.generatorBeatPhase = 0.f;
     data.generatorBeatIndex = 0;
+    data.generatorSubdivisionIndex = 0;
+    data.generatorBeatSubdivision = composer_
+        ? std::max(1, composer_->params().beatSubdivision) : 4;
     data.generatorSubdivisionPulse = 0.f;
+    data.generatorBpm = composer_ ? composer_->params().bpm : 90.f;
     data.generatorEnvelope = 0.f;
     data.generatorSeed = 0;
+    data.generatorIntensity = 0.f;
+    data.generatorDensity = 0.f;
+    data.generatorRolePhase = 0.f;
+    data.generatorPropagationDelay = 0.f;
+    data.generatorObservedGroup = idx_ < 4 ? 1 : 0;
+    data.generatorResolvedSeed = 0;
     data.transitionActive = 0;
+    data.programEnabled =
+        composer_ && composer_->params().programEnabled ? 1 : 0;
+    data.installationMoment = composer_
+        ? static_cast<int>(composer_->moment()) : 0;
+    data.groupVideoOccupancy = composer_
+        ? composer_->activeVideoCount(idx_ / 4) : 0;
+    data.globalTakeover =
+        composer_ && composer_->takeoverActive() ? 1 : 0;
+    if (composer_) {
+        const CollectiveState& collective = composer_->collectiveState();
+        data.collectiveMovement = static_cast<int>(collective.movement);
+        data.collectiveRevision =
+            static_cast<int>(collective.revision & 0x7fffffff);
+        data.collectivePhase = collective.phase;
+        data.collectiveActivity = collective.activity;
+        data.collectiveCoherence = collective.coherence;
+        data.collectiveDiversity = collective.diversity;
+        data.collectiveConvergence = collective.convergence;
+        data.collectivePopulation = collective.population;
+        data.collectiveTension = collective.tension;
+        data.collectiveDominantGenerator = collective.dominantGenerator;
+    }
 
     const ChapterState* state = composerState();
     if (!state) return;
+    data.composerContent = static_cast<int>(state->content);
 
     const bool generated = state->content == ContentType::Generator ||
                            state->content == ContentType::Transition;
@@ -237,26 +468,43 @@ void Channel::populateGeneratorOsc(CVData& data) const {
     data.screenRole = idx_ % 8;
     data.generatorStage = static_cast<int>(state->stage);
     data.generatorStageProgress = state->stageProgress;
+    data.generatorChapterPhase = state->chapterPhase;
     data.generatorBeatPhase = state->beatPhase;
     data.generatorBeatIndex = static_cast<int>(state->beatIndex & 0x7fffffff);
+    data.generatorSubdivisionIndex = state->subdivisionIndex;
     data.generatorSubdivisionPulse = state->subdivisionPulse ? 1.f : 0.f;
     data.generatorEnvelope = state->envelope;
     data.generatorSeed = static_cast<int>(state->seed & 0x7fffffff);
     data.transitionActive =
         state->content == ContentType::Transition ? 1 : 0;
+
+    // Reenvía el estado exacto usado para dibujar este canal. El sonido sigue
+    // así la partitura visual tras resolver organización, rol y CV, en vez
+    // de reconstruir esas decisiones por su cuenta.
+    if (generated) {
+        const VisualState& resolved = generator_.getState();
+        data.generatorStageProgress = resolved.stageProgress;
+        data.generatorEnvelope = resolved.envelope;
+        data.generatorIntensity = resolved.intensity;
+        data.generatorDensity = resolved.density;
+        data.generatorRolePhase = resolved.rolePhase;
+        data.generatorPropagationDelay = resolved.propagationDelay;
+        data.generatorObservedGroup = resolved.observedGroup ? 1 : 0;
+        data.generatorResolvedSeed =
+            static_cast<int>(resolved.resolvedSeed & 0x7fffffffu);
+    }
 }
 
 bool Channel::updateProceduralChapter() {
     const ChapterState* state = composerState();
-    if (!state || state->content == ContentType::Video || activePlan_.shared)
+    if (!state || state->content == ContentType::Video)
         return false;
 
     player_.setPaused(true);
-    CVData& data = const_cast<CVData&>(cv_.getData());
 
     if (state->content == ContentType::Breath) {
         score_.updateExternal(nullptr);
-        sendOscSnapshot(data);
+        sendOscSnapshot(cvPubData_);
         return true;
     }
 
@@ -265,7 +513,7 @@ bool Channel::updateProceduralChapter() {
         lastComposerRevision_ = state->revision;
     }
 
-    const int modeCount = static_cast<int>(GeneratorMode::ThresholdBridge) + 1;
+    const int modeCount = static_cast<int>(GeneratorMode::AnalogNoise) + 1;
     const GeneratorMode mode = state->content == ContentType::Transition
         ? GeneratorMode::ThresholdBridge
         : static_cast<GeneratorMode>(
@@ -290,17 +538,29 @@ bool Channel::updateProceduralChapter() {
     context.stageProgress = state->stageProgress;
     context.organization = state->organization;
     context.role = static_cast<ScreenRole>(idx_ % 8);
-    context.cvData = &data;
+    context.cvData = &cvPubData_;
     context.sourceTexture =
-        bwFbo_.isAllocated() ? &bwFbo_.getTexture() : nullptr;
+        player_.isLoaded() && player_.getTexture().isAllocated()
+            ? &player_.getTexture()
+            : nullptr;
     context.previousState = &transferredVisualState_;
     context.seed = state->seed;
     context.intensity = generatorParams_.intensity;
     context.density = generatorParams_.density;
+    context.glowGain = generatorParams_.glowGain;
+    context.glowRadius = generatorParams_.glowRadius;
+    context.feedbackDecay = generatorParams_.feedbackDecay;
+    context.cyan = generatorParams_.cyan;
+    context.red = generatorParams_.red;
 
+    const uint64_t generatorStarted = ofGetElapsedTimeMicros();
     generator_.update(context);
+    performanceSample_.scoreMs = elapsedMilliseconds(generatorStarted);
+    performanceSample_.scoreMode = 200 + static_cast<int>(mode);
     score_.updateExternal(&generator_.getFbo().getTexture());
-    sendOscSnapshot(data);
+    const uint64_t oscStarted = ofGetElapsedTimeMicros();
+    sendOscSnapshot(cvPubData_);
+    performanceSample_.oscMs = elapsedMilliseconds(oscStarted);
     return true;
 }
 
@@ -328,6 +588,7 @@ void Channel::sendOscSnapshot(CVData& data) {
     data.videoPlanType    = (int)activePlan_.type;
     data.videoShared      = activePlan_.shared ? 1 : 0;
     populateGeneratorOsc(data);
+    populateVpcOsc(data);
 
     if (dir_) {
         data.temporalPhase   = (int)dir_->temporalPhase();
@@ -347,12 +608,22 @@ void Channel::sendOscSnapshot(CVData& data) {
 void Channel::update() {
     ScopedChannelTimer updateTimer(updateMilliseconds_, performanceSample_,
                                    performanceMonitor_, idx_);
-    // Advance GlobalDirector state machine (safe to call from every channel — has dt guard)
+    // Avanza la máquina de estados de GlobalDirector (seguro desde cualquier canal — tiene guarda de dt)
     if (dir_) dir_->update();
     if (composer_) {
+        // Alimenta la última instantánea CV estable al analizador formal compartido.
+        // El compositor avanza una vez por fotograma OF, así que los canales
+        // aportan de forma natural una observación colectiva con un fotograma de latencia.
+        composer_->observeChannel(
+            idx_, cvPubData_.motionEnergy, cvPubData_.flowMagnitude,
+            cvPubData_.flowAngle, cvPubData_.events.crowdDensity,
+            cvPubData_.blobCount, cvPubData_.events.collision);
         composer_->update(dir_ ? dir_->getSpeedMultiplier() : 1.f);
     }
     if (videoDir_) {
+        videoDir_->params().sharedEventsEnabled =
+            !(composer_ && composer_->params().enabled &&
+              composer_->params().programEnabled);
         videoDir_->update(dir_ ? dir_->getSpeedMultiplier() : 1.f);
         if (composer_ && composer_->params().enabled &&
             composer_->shouldRequestVideo(idx_) &&
@@ -368,10 +639,11 @@ void Channel::update() {
     player_.update();
     if (videoDir_ && !planConfigured_) configureLoadedPlan();
 
-    // Apply speed AFTER update() so it always overwrites any rate reset that
-    // AVFoundation's internal loop-restart (OF_LOOP_NORMAL) silently performs.
-    // Calling it every frame is intentional: AVFoundation can reset the rate to
-    // 1.0 on loop boundaries, and this is the simplest reliable guard.
+    // Aplica la velocidad DESPUÉS de update() para sobrescribir siempre cualquier
+    // reinicio de tasa que el reinicio interno de bucle de AVFoundation (OF_LOOP_NORMAL)
+    // haga en silencio.
+    // Llamarlo cada fotograma es intencional: AVFoundation puede resetear la tasa a
+    // 1.0 en los límites de bucle, y esta es la guarda fiable más simple.
     const float globalSpeed = dir_ ? dir_->getSpeedMultiplier() : 1.f;
     const float effective = activePlan_.shared
         ? globalSpeed
@@ -405,10 +677,10 @@ void Channel::update() {
     } else if (videoDir_ && planConfigured_ && planStarted_ && !planFinished_ &&
                player_.getDuration() > 0.f) {
         const float currentSeconds = player_.getPosition() * player_.getDuration();
-        // AVFoundation commonly stops on the last decoded frame before normalized
-        // position reaches 1.0, while isPlaying() can remain true. A small
-        // time-based tolerance handles both natural ends and planned out-points;
-        // getIsMovieDone() is the authoritative fallback for short source clips.
+        // AVFoundation suele detenerse en el último fotograma decodificado antes de que
+        // la posición normalizada llegue a 1.0, mientras isPlaying() puede seguir en true.
+        // Una tolerancia temporal pequeña cubre finales naturales y out-points planificados;
+        // getIsMovieDone() es el respaldo autoritativo para clips de origen cortos.
         const bool reachedOut =
             currentSeconds >= std::max(segmentStartSeconds_,
                                        segmentEndSeconds_ - 0.25f);
@@ -418,33 +690,50 @@ void Channel::update() {
     performanceSample_.decoderMs = elapsedMilliseconds(sectionStarted);
 
     if (!player_.isLoaded() || player_.getWidth() == 0) {
-        CVData& data = const_cast<CVData&>(cv_.getData());
-        sendOscSnapshot(data);
+        sendOscSnapshot(cvPubData_);
         return;
     }
 
-    // --- Display FBO: B&W shader on full-res video, cover-cropped ---
+    // --- FBO de visualización: shader B&W sobre vídeo a resolución completa, recorte cover ---
     sectionStarted = ofGetElapsedTimeMicros();
-    bwFbo_.begin();
-    ofClear(0);
-    {
-        float vw = player_.getWidth(),  vh = player_.getHeight();
-        float fw = (float)w_,           fh = (float)h_;
-        float scale = std::max(fw / vw, fh / vh);   // cover: no black bars, edges clip
-        float dw = vw * scale, dh = vh * scale;
-        player_.draw((fw - dw) * 0.5f, (fh - dh) * 0.5f, dw, dh);
+    if (!vpcSettings_.enabled) {
+        bwFbo_.begin();
+        ofClear(0);
+        {
+            float vw = player_.getWidth(),  vh = player_.getHeight();
+            float fw = (float)w_,           fh = (float)h_;
+            float scale = std::max(fw / vw, fh / vh);
+            float dw = vw * scale, dh = vh * scale;
+            player_.draw((fw - dw) * 0.5f, (fh - dh) * 0.5f, dw, dh);
+        }
+        bwFbo_.end();
     }
-    bwFbo_.end();
     performanceSample_.videoRenderMs = elapsedMilliseconds(sectionStarted);
 
-    const int analysisInterval = std::max(1, cv_.params().analysisEveryNFrames);
+    // La nube de puntos no depende del CV en CPU. Se mantiene el análisis OSC legado,
+    // pero se escalona como máximo un readback cada dos fotogramas renderizados
+    // entre los ocho canales. OSC sigue cada fotograma con la última instantánea CV.
+    const int analysisInterval = vpcSettings_.enabled
+        ? std::max(16, cv_.params().analysisEveryNFrames)
+        : std::max(1, cv_.params().analysisEveryNFrames);
     const bool analyzeThisFrame =
         ((ofGetFrameNum() + static_cast<uint64_t>(idx_)) %
          static_cast<uint64_t>(analysisInterval)) == 0;
     performanceSample_.analyzed = analyzeThisFrame;
+
+    // Consume el resultado CV más reciente publicado por el hilo trabajador.
+    if (cvResultReady_.load(std::memory_order_acquire)) {
+        {
+            std::lock_guard<std::mutex> dataLock(cvDataMutex_);
+            cvPubData_ = cvDataReady_;
+        }
+        cvResultReady_.store(false, std::memory_order_relaxed);
+        detector_.update(cvPubData_);
+    }
+
     if (analyzeThisFrame) {
-        // Tiny copy for cheap GPU-to-CPU readback. Channel staggering prevents
-        // all eight readbacks from landing on the same rendered frame.
+        // Copia mínima para un readback GPU-a-CPU barato. El escalonado por canal
+        // evita que los ocho readbacks caigan en el mismo fotograma renderizado.
         cvFbo_.begin();
         ofClear(0);
         player_.draw(0, 0, kCvW, kCvH);
@@ -454,19 +743,22 @@ void Channel::update() {
         cvFbo_.readToPixels(grayPixels_);
         grayPixels_.setImageType(OF_IMAGE_GRAYSCALE);
         performanceSample_.readbackMs = elapsedMilliseconds(sectionStarted);
-        sectionStarted = ofGetElapsedTimeMicros();
-        cv_.update(grayPixels_);
-        performanceSample_.cvMs = elapsedMilliseconds(sectionStarted);
+
+        // Publica píxeles al hilo trabajador. cv_.update() ahora corre fuera del
+        // hilo GL; cvMs ya no tiene sentido aquí.
+        {
+            std::lock_guard<std::mutex> lock(cvMutex_);
+            cvPixelShare_ = grayPixels_;    // copia CPU rápida (~3 µs)
+            cvPending_ = true;
+        }
+        cvCv_.notify_one();
+        performanceSample_.cvMs = 0.f;
     }
 
-    // Event detection writes into cv_.getData().events after fresh analysis.
-    CVData& data = const_cast<CVData&>(cv_.getData());
-    if (analyzeThisFrame) detector_.update(data);
+    // Notifica a la partitura una colisión (cvPubData_ guarda el último resultado CV publicado)
+    if (cvPubData_.events.collision) score_.onCollision();
 
-    // Notify score about collision
-    if (data.events.collision) score_.onCollision();
-
-    // Sync score params from CVParams (shader uniforms)
+    // Sincroniza parámetros de la partitura desde CVParams (uniforms del shader)
     const CVParams& cvp = cv_.params();
     score_.params().bwThreshold = cvp.bwThreshold;
     score_.params().posterize   = cvp.bwPosterize;
@@ -477,23 +769,75 @@ void Channel::update() {
     score_.params().vignette    = cvp.bwVignette;
     score_.params().sCurve      = cvp.bwSCurve;
 
-    // Pass both bw texture and raw video texture to the score renderer
+    // Pasa la textura bw y la textura de vídeo original al renderizador de la partitura
     sectionStarted = ofGetElapsedTimeMicros();
-    score_.update(bwFbo_.getTexture(), player_.getTexture(), cv_);
+    if (vpcSettings_.enabled) {
+        VideoPointCloudSettings active = vpcSettings_;
+        if (active.depthSource != PointCloudDepthSource::Luminance &&
+            !pdjvBridge_.available()) {
+            active.depthSource = PointCloudDepthSource::Luminance;
+            active.maskMode = PointCloudMaskMode::FullFrame;
+        } else if (active.depthSource != PointCloudDepthSource::Luminance) {
+            const double t = player_.isLoaded()
+                ? player_.getPosition() * player_.getDuration()
+                : 0.0;
+            pdjvBridge_.sync(t, pdjvView_, pdjvMaskTex_, pdjvDepthTex_);
+            if (!pdjvView_.valid && active.depthSource != PointCloudDepthSource::Luminance) {
+                active.depthSource = PointCloudDepthSource::Luminance;
+                active.maskMode = PointCloudMaskMode::FullFrame;
+            }
+        }
+        videoPointCloud_.settings() = active;
+        videoPointCloud_.update(buildVideoGeneratorContext(), ofGetLastFrameTime());
+        performanceSample_.scoreMode = 100;
+    } else {
+        score_.update(bwFbo_.getTexture(), player_.getTexture(), cv_);
+        performanceSample_.scoreMode = static_cast<int>(score_.currentMode());
+    }
     performanceSample_.scoreMs = elapsedMilliseconds(sectionStarted);
-    performanceSample_.scoreMode = static_cast<int>(score_.currentMode());
 
-    // Repeated full-state OSC snapshot: CV, events, video, score, and director.
+    // Instantánea OSC de estado completo repetida: CV, eventos, vídeo, partitura y director.
     sectionStarted = ofGetElapsedTimeMicros();
-    sendOscSnapshot(data);
+    sendOscSnapshot(cvPubData_);
     performanceSample_.oscMs = elapsedMilliseconds(sectionStarted);
+}
+
+// Invertir la región terminada cuesta un quad mezclado.
+// isVpc: si es true se suprime la inversión solo-generador del compositor; la
+// inversión de polaridad de canal completo (polarityInvertActive) sigue aplicándose a VPC.
+// El flag permanente invertPolarity_ invierte todo en cualquier caso.
+void Channel::applyPolarity(int x, int y, int segW, int segH, bool isVpc) const {
+    const bool composerGenInvert =
+        !isVpc && composer_ && composer_->generatorInvertActive();
+    const bool composerPolarityInvert =
+        composer_ && composer_->polarityInvertActive();
+    if (!invertPolarity_ && !composerGenInvert && !composerPolarityInvert)
+        return;
+    ofPushStyle();
+    ofFill();
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ZERO);
+    ofSetColor(255);
+    ofDrawRectangle(x, y, segW, segH);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    ofPopStyle();
+    ofEnableAlphaBlending();
 }
 
 void Channel::draw() {
     const uint64_t drawStarted = ofGetElapsedTimeMicros();
     int sw = ofGetWidth(), sh = ofGetHeight();
-    if (sw == w_ && sh == h_) {
-        score_.draw(0, 0, w_, h_);
+    const ChapterState* chapter = composerState();
+    const bool drawVpc = vpcSettings_.enabled &&
+        (!chapter || chapter->content == ContentType::Video);
+    const bool anyInvert = composer_ &&
+        (composer_->generatorInvertActive() || composer_->polarityInvertActive());
+    const float blackCrush = (!drawVpc && anyInvert) ? kInvertBlackLevel : 0.f;
+    if (drawVpc) {
+        drawVideoPointCloud(0, 0, sw, sh);
+    } else if (sw == w_ && sh == h_) {
+        score_.draw(0, 0, w_, h_, blackCrush);
     } else {
         float scl = std::min((float)sw / w_, (float)sh / h_);
         int   dw  = (int)(w_ * scl);
@@ -503,12 +847,12 @@ void Channel::draw() {
         ofSetColor(0);
         ofDrawRectangle(0, 0, sw, sh);
         ofSetColor(255);
-        score_.draw(ox, oy, dw, dh);
+        score_.draw(ox, oy, dw, dh, blackCrush);
     }
 
-    // Global coordinated clear — all screens simultaneously.
-    // Must reset GL state: GraphicScore render functions can leave ofNoFill()
-    // active, and blend mode may be dirty. Reset explicitly before drawing.
+    // Clear coordinado global — todas las pantallas a la vez.
+    // Hay que resetear el estado GL: las funciones de render de GraphicScore pueden
+    // dejar ofNoFill() activo, y el modo de blend puede estar sucio. Reset explícito antes de dibujar.
     if (dir_ && dir_->isClearActive()) {
         ofPushStyle();
         ofFill();
@@ -519,7 +863,7 @@ void Channel::draw() {
         ofPopStyle();
     }
 
-    // Temporal phase indicator — always visible so the user can confirm effects.
+    // Indicador de fase temporal — siempre visible para que el usuario confirme los efectos.
     if (dir_) {
         bool slow = dir_->isSlowMo();
         bool fast = dir_->isFastMo();
@@ -529,15 +873,17 @@ void Channel::draw() {
             ofPushStyle();
             ofFill();
             ofEnableAlphaBlending();
-            // Dark pill background
+            // Fondo de píldora oscuro
             ofSetColor(0, 0, 0, 160);
             ofDrawRectangle(8, sh - 28, 90, 20);
-            // Bright text
-            ofSetColor(slow ? ofColor(80, 200, 255) : ofColor(255, 160, 40), 240);
+            // Texto brillante
+            ofSetColor(slow ? ofColor(255, 255, 255) : ofColor(160, 160, 160), 240);
             ofDrawBitmapString(label, 12, sh - 13);
             ofPopStyle();
         }
     }
+
+    applyPolarity(0, 0, sw, sh, drawVpc);
     performanceSample_.drawMs = elapsedMilliseconds(drawStarted);
     if (performanceMonitor_)
         performanceMonitor_->recordChannelDraw(idx_, performanceSample_.drawMs);
@@ -545,8 +891,16 @@ void Channel::draw() {
 
 void Channel::drawInRegion(int x, int y, int segW, int segH) {
     const uint64_t drawStarted = ofGetElapsedTimeMicros();
-    if (segW == w_ && segH == h_) {
-        score_.draw(x, y, w_, h_);
+    const ChapterState* chapter = composerState();
+    const bool drawVpc = vpcSettings_.enabled &&
+        (!chapter || chapter->content == ContentType::Video);
+    const bool anyInvert = composer_ &&
+        (composer_->generatorInvertActive() || composer_->polarityInvertActive());
+    const float blackCrush = (!drawVpc && anyInvert) ? kInvertBlackLevel : 0.f;
+    if (drawVpc) {
+        drawVideoPointCloud(x, y, segW, segH);
+    } else if (segW == w_ && segH == h_) {
+        score_.draw(x, y, w_, h_, blackCrush);
     } else {
         float scl = std::min((float)segW / w_, (float)segH / h_);
         int   dw  = (int)(w_ * scl);
@@ -556,7 +910,7 @@ void Channel::drawInRegion(int x, int y, int segW, int segH) {
         ofSetColor(0);
         ofDrawRectangle(x, y, segW, segH);
         ofSetColor(255);
-        score_.draw(ox, oy, dw, dh);
+        score_.draw(ox, oy, dw, dh, blackCrush);
     }
 
     if (dir_ && dir_->isClearActive()) {
@@ -580,11 +934,13 @@ void Channel::drawInRegion(int x, int y, int segW, int segH) {
             ofEnableAlphaBlending();
             ofSetColor(0, 0, 0, 160);
             ofDrawRectangle(x + 8, y + segH - 28, 90, 20);
-            ofSetColor(slow ? ofColor(80, 200, 255) : ofColor(255, 160, 40), 240);
+            ofSetColor(slow ? ofColor(255, 255, 255) : ofColor(160, 160, 160), 240);
             ofDrawBitmapString(label, x + 12, y + segH - 13);
             ofPopStyle();
         }
     }
+
+    applyPolarity(x, y, segW, segH, drawVpc);
     performanceSample_.drawMs = elapsedMilliseconds(drawStarted);
     if (performanceMonitor_)
         performanceMonitor_->recordChannelDraw(idx_, performanceSample_.drawMs);
@@ -595,6 +951,6 @@ void Channel::pause()           { player_.setPaused(true); }
 void Channel::stop()            { player_.stop(); }
 void Channel::setSpeed(float s) {
     baseSpeed_ = s;
-    // Effective speed applied in update() where GlobalDirector multiplier is known
+    // Velocidad efectiva aplicada en update() donde se conoce el multiplicador de GlobalDirector
 }
 bool Channel::isPlaying() const { return player_.isPlaying(); }

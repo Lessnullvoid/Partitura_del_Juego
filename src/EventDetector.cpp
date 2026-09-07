@@ -12,13 +12,13 @@ void EventDetector::update(CVData& data) {
 }
 
 bool EventDetector::detectCollision(const CVData& d) {
-    // Heuristic 1: sudden drop in blob count (merge)
+    // Heurística 1: caída brusca del recuento de blobs (fusión)
     int drop = prevBlobCount_ - d.blobCount;
     if (prevBlobCount_ > 0 && drop >= params_.collisionOverlap * prevBlobCount_) {
         return true;
     }
 
-    // Heuristic 2: any two blobs overlap significantly (IoU on normalized bounding boxes)
+    // Heurística 2: dos blobs se solapan de forma significativa (IoU sobre bounding boxes normalizadas)
     int n = (int)d.blobs.size();
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
@@ -72,7 +72,7 @@ float EventDetector::detectCrowd(const CVData& d) {
     int n = (int)d.blobs.size();
     if (n < params_.crowdMinBlobs) return 0.f;
 
-    // Count the largest cluster within crowdMaxDist of each blob
+    // Cuenta el clúster más grande dentro de crowdMaxDist de cada blob
     int maxCluster = 0;
     float r2 = params_.crowdMaxDist * params_.crowdMaxDist;
 
@@ -93,7 +93,7 @@ float EventDetector::detectCrowd(const CVData& d) {
 }
 
 float EventDetector::detectLegDistance(const CVData& d) {
-    // For each blob, bbH / sqrt(area) approximates elongation (standing player = high ratio)
+    // Para cada blob, bbH / sqrt(area) aproxima la elongación (jugador de pie = ratio alto)
     if (d.blobs.empty()) return 0.f;
 
     float total = 0.f;

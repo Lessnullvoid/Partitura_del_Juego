@@ -18,15 +18,15 @@ struct CVParams {
     int   cannyHigh      = 90;
     float blobThreshold  = 80.f;
 
-    // Image preprocessing
-    bool  useCLAHE       = false;  // off by default — CLAHE creates harsh look
+    // Preprocesado de imagen
+    bool  useCLAHE       = false;  // desactivado por defecto — CLAHE da un aspecto duro
     float claheClipLimit = 2.0f;
     int   claheTileSize  = 8;
     bool  equalizeHist   = false;
 
-    // B&W shader display params (passed to GraphicScore / shader)
-    float bwThreshold      = 0.0f;   // off — let tonal curve do the work
-    float bwPosterize      = 256.f;  // off — continuous gradation
+    // Parámetros de visualización del shader B&W (pasados a GraphicScore / shader)
+    float bwThreshold      = 0.0f;   // desactivado — que trabaje la curva tonal
+    float bwPosterize      = 256.f;  // desactivado — gradación continua
     float bwBrightness     = 0.0f;
     float bwContrast       = 1.3f;
     float bwGamma          = 0.95f;
@@ -44,19 +44,19 @@ public:
     const CVData&         getData()    const { return data_; }
     const cv::Mat&        getFgMask()  const { return fgMask_; }
     const cv::Mat&        getEdges()   const { return edges_; }
-    const cv::Mat&        getGrayMat() const { return grayMat_; }  // analysis-res grayscale frame
+    const cv::Mat&        getGrayMat() const { return grayMat_; }  // fotograma en escala de grises a resolución de análisis
     ofxCv::FlowFarneback& getFlow()          { return flow_; }
     ofxCv::ContourFinder& getContour()       { return contourFinder_; }
 
-    // Bounding boxes in analysis-resolution space
+    // Cajas delimitadoras en espacio de resolución de análisis
     const std::vector<cv::Rect>& getBoundingRects() const { return boundingRects_; }
 
     glm::vec2 getAnalysisScale() const {
         return glm::vec2((float)fullW_ / (float)w_, (float)fullH_ / (float)h_);
     }
 
-    // Override display resolution after setup (so getAnalysisScale() reflects the
-    // real display size even when the analysis FBO is pre-downscaled before input).
+    // Sobrescribe la resolución de visualización tras setup (para que getAnalysisScale()
+    // refleje el tamaño real de visualización aunque el FBO de análisis se haya reducido antes).
     void setDisplaySize(int w, int h) { fullW_ = w; fullH_ = h; }
 
     CVParams& params() { return params_; }

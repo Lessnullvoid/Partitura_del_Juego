@@ -1,5 +1,5 @@
 #include "CVPipeline.h"
-
+ 
 using namespace ofxCv;
 using namespace cv;
 
@@ -43,9 +43,9 @@ void CVPipeline::update(ofPixels& grayPixels) {
         full.copyTo(grayMat_);
     }
 
-    // Adaptive contrast enhancement
+    // Mejora adaptativa de contraste
     if (params_.useCLAHE) {
-        // Recreate if clip limit changed
+        // Recrea si ha cambiado el clip limit
         clahe_->setClipLimit(params_.claheClipLimit);
         clahe_->setTilesGridSize(cv::Size(params_.claheTileSize, params_.claheTileSize));
         clahe_->apply(grayMat_, grayMat_);
@@ -53,22 +53,22 @@ void CVPipeline::update(ofPixels& grayPixels) {
         cv::equalizeHist(grayMat_, grayMat_);
     }
 
-    // Background subtraction → foreground mask
+    // Sustracción de fondo → máscara de primer plano
     bgSub_->apply(grayMat_, fgMask_);
 
-    // Blob / contour finding on foreground mask
+    // Búsqueda de blobs / contornos sobre la máscara de primer plano
     contourFinder_.findContours(fgMask_);
 
-    // Cache bounding rects for EventDetector
+    // Guarda en caché los bounding rects para EventDetector
     boundingRects_.clear();
     for (int i = 0; i < (int)contourFinder_.size(); i++) {
         boundingRects_.push_back(contourFinder_.getBoundingRect(i));
     }
 
-    // Edge detection
+    // Detección de bordes
     cv::Canny(grayMat_, edges_, params_.cannyLow, params_.cannyHigh);
 
-    // Motion energy + optical flow
+    // Energía de movimiento + flujo óptico
     float energy = 0.f;
     if (!firstFrame_) {
         flow_.calcOpticalFlow(grayMat_);
@@ -80,7 +80,7 @@ void CVPipeline::update(ofPixels& grayPixels) {
     grayMat_.copyTo(prevGray_);
     firstFrame_ = false;
 
-    // Populate CVData
+    // Rellena CVData
     data_.motionEnergy = energy;
 
     glm::vec2 avgFlow = flow_.getAverageFlow();

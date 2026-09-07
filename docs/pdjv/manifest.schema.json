@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PDJV manifest",
+  "type": "object",
+  "required": [
+    "format",
+    "version",
+    "sourceId",
+    "analysisId",
+    "packageId",
+    "fps",
+    "frameCount",
+    "durationSeconds",
+    "sourceWidth",
+    "sourceHeight",
+    "coordinateSystem",
+    "depthConvention",
+    "endianness",
+    "features",
+    "depth"
+  ],
+  "properties": {
+    "format": { "const": "PDJV" },
+    "version": { "type": "integer", "minimum": 0 },
+    "sourceId": { "type": "string", "minLength": 1 },
+    "analysisId": { "type": "string", "minLength": 1 },
+    "packageId": { "type": "string", "minLength": 1 },
+    "fps": { "type": "number", "exclusiveMinimum": 0 },
+    "frameCount": { "type": "integer", "minimum": 1 },
+    "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+    "sourceWidth": { "type": "integer", "minimum": 1 },
+    "sourceHeight": { "type": "integer", "minimum": 1 },
+    "coordinateSystem": { "const": "normalized_image" },
+    "depthConvention": {
+      "enum": ["larger_means_farther", "larger_means_nearer"]
+    },
+    "jointSchema": { "type": "string" },
+    "endianness": { "const": "little" },
+    "features": {
+      "type": "object",
+      "properties": {
+        "masks": { "type": "boolean" },
+        "depth": { "type": "boolean" },
+        "pose": { "type": "boolean" },
+        "motion": { "type": "boolean" },
+        "events": { "type": "boolean" },
+        "teamLabels": { "type": "boolean" },
+        "fieldCalibration": { "type": "boolean" }
+      }
+    },
+    "depth": {
+      "type": "object",
+      "required": ["convention", "globalMin", "globalMax", "invalidValue"],
+      "properties": {
+        "convention": {
+          "enum": ["larger_means_farther", "larger_means_nearer"]
+        },
+        "globalMin": { "type": "number" },
+        "globalMax": { "type": "number" },
+        "invalidValue": { "type": "number" },
+        "hasPlayerRelativeDetail": { "type": "boolean" }
+      }
+    },
+    "field": { "type": "object" },
+    "compression": { "type": "object" }
+  }
+}

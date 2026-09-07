@@ -31,8 +31,8 @@
             "y": 0
         }
     ],
-    "_installationLayout_comment": "4 vertical 1080x1920 monitors — swap in for installation:",
-    "_note": "ICUIXIAN 0104-XZ vertical mode requires two independent 1920x1080@60 inputs. Use Configure ICUIXIAN outputs in the GUI to detect, switch and save their actual desktop positions.",
+    "_installationLayout_comment": "4 vertical 1080x1920 monitors \u2014 swap in for installation:",
+    "_note": "Two ICUIXIAN 0104-XZ controllers. Wall A (presentationWindows[0], layout 4x1): four portrait strips sent to controller A configured as 4x1 with 90 deg rotation -> 4 x 1080x1920 portrait panels. Wall B (presentationWindows[1], layout 2x2): 2x2 grid sent to controller B configured as 2x2 with 0 deg rotation -> 4 x 1920x1080 landscape panels. Use Configure ICUIXIAN outputs (Wall A) or Configure Mixed Wall (Wall A + B) in the GUI to detect, switch and save desktop positions.",
     "_testLayout": [
         {
             "height": 480,
@@ -59,7 +59,7 @@
             "y": 40
         }
     ],
-    "_testLayout_comment": "Small 9:16 test windows (all on built-in) — swap in if no external monitor:",
+    "_testLayout_comment": "Small 9:16 test windows (all on built-in) \u2014 swap in if no external monitor:",
     "_testSingleWindow": {
         "height": 1080,
         "width": 1920,
@@ -118,7 +118,8 @@
         }
     ],
     "clips": {
-        "folder": "../../cortos"
+        "folder": "../../cortos",
+        "horizontalFolder": "horizontal"
     },
     "controlWindow": {
         "height": 900,
@@ -133,20 +134,35 @@
         "blobMaxArea": 200000,
         "blobMinArea": 500,
         "eightChannelEveryNFrames": 2,
-        "flowWindowSize": 8,
+        "flowWindowSize": 6,
         "halfRes": true
     },
     "generators": {
         "density": 0.5,
         "detailTier": 2,
+        "feedbackDecay": 0.82,
+        "glowGain": 0.9,
+        "glowRadius": 2.2,
         "intensity": 0.65,
+        "primaryColor": [
+            238,
+            238,
+            238
+        ],
+        "secondaryColor": [
+            112,
+            112,
+            112
+        ],
         "showHud": false
     },
     "osc": {
         "host": "localhost",
+        "listenPort": 9002,
         "port": 9001
     },
     "outputMode": "dualWindow8",
+    "presentationFullscreen": true,
     "performanceTest": {
         "durationSeconds": 600.0,
         "reportIntervalSeconds": 5.0,
@@ -163,12 +179,14 @@
     "presentationWindows": [
         {
             "height": 1080,
+            "layout": "4x1",
             "width": 1920,
             "x": 0,
             "y": 0
         },
         {
             "height": 1080,
+            "layout": "2x2",
             "width": 1920,
             "x": 1920,
             "y": 0
@@ -187,10 +205,22 @@
         "controllers": 2,
         "inputHeight": 1080,
         "inputWidth": 1920,
-        "layoutPerController": "4x1",
         "model": "0104-XZ",
         "refreshHz": 60.0,
-        "rotationDegrees": 90
+        "wallA": {
+            "layout": "4x1",
+            "layoutPerController": "4x1",
+            "panels": 4,
+            "panelOrientation": "portrait",
+            "rotationDegrees": 90
+        },
+        "wallB": {
+            "layout": "2x2",
+            "layoutPerController": "2x2",
+            "panels": 4,
+            "panelOrientation": "landscape",
+            "rotationDegrees": 0
+        }
     },
     "videoDirector": {
         "driftTolerance": 0.08,
@@ -208,11 +238,31 @@
     },
     "visualComposer": {
         "beatSubdivision": 4,
+        "barScanMomentDuration": 32.0,
         "bpm": 90.0,
         "breathMaxDuration": 6.0,
         "breathMinDuration": 2.0,
         "breathProbability": 0.12,
-        "enabled": false,
+        "disabledGenerators": [
+            11,
+            14
+        ],
+        "noiseEventEnabled": true,
+        "noiseEventInterval": 40.0,
+        "noiseEventDuration": 5.0,
+        "generatorInvertEnabled": true,
+        "generatorInvertInterval": 55.0,
+        "generatorInvertDuration": 10.0,
+        "polarityInvertEnabled": true,
+        "polarityInvertInterval": 90.0,
+        "polarityInvertDuration": 8.0,
+        "collectiveLogicEnabled": true,
+        "collectiveDecisionHold": 1.25,
+        "collectiveMinimumDwell": 4.0,
+        "collectiveEventCooldown": 16.0,
+        "collectiveResponse": 0.72,
+        "dualVideoProbability": 0.32,
+        "enabled": true,
         "generatorMaxDuration": 20.0,
         "generatorMinDuration": 8.0,
         "generatorProbability": 0.35,
@@ -222,13 +272,47 @@
             0.35,
             0.15
         ],
+        "maxVideoPerGroup": 2,
+        "programEnabled": true,
+        "pulseMomentDuration": 24.0,
         "recentHistorySize": 3,
-        "seed": 1346652721,
+        "seed": 0,
+        "takeoverDurationMax": 13.0,
+        "takeoverDurationMin": 6.0,
+        "takeoverIntervalMax": 45.0,
+        "takeoverIntervalMin": 20.0,
         "transitionMaxDuration": 4.0,
         "transitionMinDuration": 1.0,
         "transitionProbability": 0.08,
         "videoMaxDuration": 30.0,
         "videoMinDuration": 8.0,
         "videoProbability": 0.45
+    },
+    "videoPointCloud": {
+        "enabled": true,
+        "qualityTier": "Installation",
+        "gridWidth": 256,
+        "gridHeight": 256,
+        "depthSource": "Luminance",
+        "maskMode": "FullFrame",
+        "depthScale": 1.15,
+        "depthCenter": 0.5,
+        "pointSize": 2.2,
+        "luminanceFloor": 0.035,
+        "luminanceCeiling": 1.0,
+        "colorGain": 1.0,
+        "opacity": 0.9,
+        "zInvert": false,
+        "feedbackEnabled": false,
+        "feedbackDecay": 0.88,
+        "autoFit": true,
+        "cameraDistance": 1.8,
+        "cameraFov": 42,
+        "transitionDisplacement": 0.85,
+        "preset": 0,
+        "pdjvPackagePath": ""
+    },
+    "visuals": {
+        "invertPolarity": false
     }
 }

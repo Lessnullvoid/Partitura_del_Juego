@@ -1,9 +1,9 @@
 #pragma once
 #include "ofMain.h"
 
-// ---- Temporal phase ---------------------------------------------------------
-// Slow: long ramp-down → long hold → ramp back
-// Fast: short ramp-up  → short hold → ramp back
+// ---- Fase temporal ----------------------------------------------------------
+// Slow: rampa descendente larga → hold largo → rampa de retorno
+// Fast: rampa ascendente corta → hold corto → rampa de retorno
 enum class TemporalPhase {
     Idle,
     SlowRampDown,
@@ -14,7 +14,7 @@ enum class TemporalPhase {
     FastRampDown,
 };
 
-// ---- Screen-clear phase -----------------------------------------------------
+// ---- Fase de clear de pantalla ----------------------------------------------
 enum class ClearPhase {
     Idle,
     FadeIn,
@@ -22,32 +22,32 @@ enum class ClearPhase {
     FadeOut,
 };
 
-// ---- Parameters (editable at runtime via ControlApp) -----------------------
+// ---- Parámetros (editables en runtime vía ControlApp) ----------------------
 struct GlobalDirectorParams {
-    // Target speeds (multipliers applied to each channel's base speed)
-    float slowSpeed       = 0.30f;   // 30 % — clearly slow, not frozen
-    float fastSpeed       = 3.50f;   // 350 % — unmistakably fast
+    // Velocidades objetivo (multiplicadores sobre la velocidad base de cada canal)
+    float slowSpeed       = 0.30f;   // 30 % — claramente lento, no congelado
+    float fastSpeed       = 3.50f;   // 350 % — inequívocamente rápido
 
-    // Slow-motion durations (seconds)
-    // Short ramps give an immediate, snappy feel from the button press.
-    float slowRampDownDur = 0.40f;   // snap in quickly
+    // Duraciones de cámara lenta (segundos)
+    // Rampas cortas dan una sensación inmediata y seca desde el botón.
+    float slowRampDownDur = 0.40f;   // entrada rápida
     float slowHoldMin     = 2.0f;
     float slowHoldMax     = 4.0f;
-    float slowRampUpDur   = 0.60f;   // snap out quickly
+    float slowRampUpDur   = 0.60f;   // salida rápida
 
-    // Fast-forward durations (seconds)
-    float fastRampUpDur   = 0.15f;   // almost instant
-    float fastHoldMin     = 2.0f;    // sustain long enough to register
+    // Duraciones de avance rápido (segundos)
+    float fastRampUpDur   = 0.15f;   // casi instantáneo
+    float fastHoldMin     = 2.0f;    // sostener lo bastante para registrarse
     float fastHoldMax     = 4.0f;
-    float fastRampDownDur = 0.20f;   // snap back
+    float fastRampDownDur = 0.20f;   // retorno seco
 
-    // Auto-trigger intervals (seconds)
+    // Intervalos de auto-disparo (segundos)
     float slowIntervalMin  = 25.f;
     float slowIntervalMax  = 50.f;
     float fastIntervalMin  = 15.f;
     float fastIntervalMax  = 35.f;
 
-    // Screen clear durations (seconds)
+    // Duraciones de clear de pantalla (segundos)
     float clearFadeInDur   = 0.20f;
     float clearHoldMin     = 0.8f;
     float clearHoldMax     = 2.0f;
@@ -55,23 +55,23 @@ struct GlobalDirectorParams {
     float clearIntervalMin = 30.f;
     float clearIntervalMax = 70.f;
 
-    // Auto-triggers disabled by default: the performer decides when effects fire.
-    // Enable in the Global Director panel for autonomous mode.
+    // Auto-disparos desactivados por defecto: el intérprete decide cuándo saltan los efectos.
+    // Activar en el panel Global Director para modo autónomo.
     bool autoSlow  = false;
     bool autoFast  = false;
     bool autoClear = false;
 };
 
 // ---- GlobalDirector ---------------------------------------------------------
-// Shared by all four Channel objects.  Update() is safe to call from every
-// app's update loop — internally it skips duplicate calls within the same
-// real frame (dt < 1 ms guard).
+// Compartido por los cuatro objetos Channel.  Update() es seguro de llamar
+// desde el bucle update de cada app — internamente omite llamadas duplicadas
+// en el mismo fotograma real (guarda dt < 1 ms).
 class GlobalDirector {
 public:
     void setup();
-    void update();   // call from any/all channel apps each frame
+    void update();   // llamar desde cualquiera/todas las apps de canal cada fotograma
 
-    // Speed multiplier — Channel applies this on top of its base speed
+    // Multiplicador de velocidad — Channel lo aplica encima de su velocidad base
     float   getSpeedMultiplier() const;
     bool    isSlowMo()           const { return tPhase_ == TemporalPhase::SlowRampDown
                                              || tPhase_ == TemporalPhase::SlowHold
@@ -80,15 +80,15 @@ public:
                                              || tPhase_ == TemporalPhase::FastHold
                                              || tPhase_ == TemporalPhase::FastRampDown; }
 
-    // Screen-clear overlay — Channel draws this rectangle over its window
+    // Overlay de clear de pantalla — Channel dibuja este rectángulo sobre su ventana
     bool    isClearActive()      const { return cPhase_ != ClearPhase::Idle; }
     float   getClearAlpha()      const { return cAlpha_; }   // 0..255
     ofColor getClearColor()      const { return cColor_; }
 
-    // Manual triggers (e.g. from ControlApp buttons)
+    // Disparos manuales (p. ej. desde botones de ControlApp)
     void triggerSlow();
     void triggerFast();
-    // Pass an explicit color to use it directly; call with no argument to cycle the palette.
+    // Pasar un color explícito para usarlo directo; sin argumento recorre la paleta.
     void triggerClear(ofColor color = ofColor(0, 0, 0, 0));
 
     GlobalDirectorParams& params()       { return p_; }
@@ -98,12 +98,12 @@ public:
     ClearPhase    clearPhase()    const { return cPhase_; }
 
 private:
-    // Smooth ease-in-out (Hermite)
+    // Ease-in-out suave (Hermite)
     float ease(float t) const { return t * t * (3.f - 2.f * t); }
 
     GlobalDirectorParams p_;
 
-    // Temporal state
+    // Estado temporal
     TemporalPhase tPhase_  = TemporalPhase::Idle;
     double        tTimer_  = 0.0;
     double        tDur_    = 0.0;
@@ -112,17 +112,17 @@ private:
     double        tNextSlow_ = 0.0;
     double        tNextFast_ = 0.0;
 
-    // Clear state
+    // Estado de clear
     ClearPhase    cPhase_  = ClearPhase::Idle;
     double        cTimer_  = 0.0;
     double        cDur_    = 0.0;
     float         cAlpha_  = 0.f;
     ofColor       cColor_  = ofColor(0);
-    int           cColorIdx_ = 0;   // cycles through clear color palette
+    int           cColorIdx_ = 0;   // recorre la paleta de color de clear
     double        cNextClear_ = 0.0;
 
-    // Frame-guard to prevent double-updating in multi-window setups.
-    // -1 = uninitialized: setup() is called before the OF timer is ready,
-    // so we defer initialization to the first update() call.
+    // Guarda de fotograma para evitar doble actualización en setups multi-ventana.
+    // -1 = sin inicializar: setup() se llama antes de que el temporizador OF esté listo,
+    // así que se aplaza la inicialización a la primera llamada a update().
     double lastTime_ = -1.0;
 };
