@@ -46,3 +46,4 @@ analyzer/**/__pycache__/
 analyzer/**/*.pyc
 **/.pytest_cache/
 docs/data_matrix_analysis.md
+docs/VIDEO_POINTCLOUD_VALIDATION.md
