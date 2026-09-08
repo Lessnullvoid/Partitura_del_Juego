@@ -147,7 +147,7 @@ Canny opera sobre el fotograma en escala de grises con umbrales bajo/alto config
 
 La partitura gráfica cicla a través de 13 modos de renderizado secuenciados automáticamente. Cada modo dura un tiempo aleatorio entre `minModeDuration` y `maxModeDuration` segundos. Se inserta una pausa `BwClean` entre cada modo activo, enmarcando cada técnica como un episodio diferenciado.
 
-`buildSequence()` recorre 19 modos activos por ciclo. Cada técnica entra desde el negro filmado y vuelve a él, de modo que la pausa es el eje de toda la partitura:
+`buildSequence()` recorre 18 modos activos por ciclo separados por pausas `BwClean`. Cada técnica entra desde el negro filmado y vuelve a él. `SlitScan` existe como modo pero no está programado en la secuencia automática — sigue disponible vía el forzado manual desde la ControlApp.
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","edgeLabelBackground":"#1a1a1a"}}}%%
@@ -159,29 +159,28 @@ flowchart LR
     BW -->|03| S03["BBoxTracker"]
     BW -->|04| S04["ThermalVision"]
     BW -->|05| S05["VideoNormal"]
-    BW -->|06| S06["SlitScan"]
-    BW -->|07| S07["VideoLines"]
-    BW -->|08| S08["Waveform"]
-    BW -->|09| S09["VideoSquares"]
-    BW -->|10| S10["BinaryText"]
-    BW -->|11| S11["ThermalVision"]
-    BW -->|12| S12["VideoNumbers"]
-    BW -->|13| S13["SlitScan"]
-    BW -->|14| S14["GridData"]
-    BW -->|15| S15["VideoNormal"]
-    BW -->|16| S16["VideoLines"]
-    BW -->|17| S17["Barcode"]
-    BW -->|18| S18["ThermalVision"]
-    BW -->|19| S19["VideoSquares"]
-    S19 -.->|"ciclo"| BW
+    BW -->|06| S06["VideoLines"]
+    BW -->|07| S07["Waveform"]
+    BW -->|08| S08["VideoSquares"]
+    BW -->|09| S09["BinaryText"]
+    BW -->|10| S10["ThermalVision"]
+    BW -->|11| S11["VideoNumbers"]
+    BW -->|12| S12["GridData"]
+    BW -->|13| S13["VideoNormal"]
+    BW -->|14| S14["VideoLines"]
+    BW -->|15| S15["Barcode"]
+    BW -->|16| S16["ThermalVision"]
+    BW -->|17| S17["VideoSquares"]
+    BW -->|18| S18["ScanLine"]
+    S18 -.->|"ciclo"| BW
 
     classDef pause fill:#f2f2f2,stroke:#ffffff,color:#0a0a0a
     classDef rep fill:#1a0606,stroke:#ff2b2b,color:#ff7a7a
     class BW pause
-    class S04,S11,S18 rep
+    class S04,S10,S16 rep
 ```
 
-En rojo, las tres apariciones de `ThermalVision` — el estribillo más marcado del ciclo. `SlitScan`, `VideoLines`, `VideoNumbers`, `VideoNormal` y `VideoSquares` reaparecen dos veces cada uno; `BBoxTracker`, `Waveform`, `BinaryText`, `GridData` y `Barcode` suenan una sola vez por ciclo.
+`ThermalVision` aparece tres veces — el estribillo más marcado del ciclo. `VideoLines`, `VideoNumbers`, `VideoNormal`, `VideoSquares` y `ScanLine` reaparecen dos veces cada uno; `BBoxTracker`, `Waveform`, `BinaryText`, `GridData` y `Barcode` aparecen una sola vez por ciclo.
 
 ### Base fílmica — shader B&W (`bw.frag`)
 
@@ -226,13 +225,13 @@ Todos los modos que no usan color en bruto comienzan con este shader GLSL. Convi
 
 **ThermalVision** — mapa de colores Ironbow / FLIR via `thermal.frag`: negro (frío) → violeta → carmesí → naranja → amarillo → blanco (caliente). Artefacto de cuadrícula de sensor animada. Barra de gradiente en borde derecho. Marcas térmicas por blob.
 
-**SlitScan** — slit-scan temporal. La columna central del fotograma en escala de grises se escribe en un buffer circular de 270 columnas. El buffer se despliega izquierda (pasado) → derecha (presente). Eje de tiempo etiquetado en segundos en la parte inferior.
+**SlitScan** — slit-scan temporal. La columna de muestreo sigue el movimiento y escribe columnas en un buffer circular. El buffer se despliega izquierda (pasado) → derecha (presente), con capas fantasma de instantes congelados superpuestas. Eje de tiempo en la parte inferior. *No está programado en la secuencia automática* — activar vía el dropdown **Mode** en la ControlApp o pulsando **Force Mode**.
 
 **Flash** — rectángulo blanco de pantalla completa que se desvanece de alpha 200 a 0 en `flashDuration` (0,25 s). Se activa automáticamente en colisiones detectadas.
 
 ### Elementos visuales persistentes
 
-**Ciclo de color de marcas** — en cada transición de modo el color avanza: blanco → rojo → azul eléctrico → repetir.
+**Ciclo de color de marcas** — en cada transición de modo el color avanza en escala de grises: blanco (255) → gris claro (186) → gris oscuro (124) → repetir. La instalación es monocroma; no se usan rojo ni azul en las marcas.
 
 **Strobe de clip** — en cada cambio de clip un rectángulo blanco o rojo se desvanece a 1100 alpha/s (~0,23 s).
 
@@ -306,18 +305,37 @@ Un canal puede anular claves individuales bajo `channels[N].videoPointCloud`. Lo
 
 ### Lenguaje visual procedimental
 
-`VisualGenerator` añade ocho escenas sintéticas que pueden ocupar la pantalla sin vídeo o transformar el último fotograma capturado:
+`VisualGenerator` implementa 15 escenas sintéticas que pueden ocupar la pantalla sin vídeo o transformar el último fotograma capturado. El `VisualComposer` programa y organiza estos generadores en el tiempo; `OrbitalRings` está deshabilitado del programa automático por defecto (`disabledGenerators`).
 
-- **RasterPulse:** bandas, obturadores, bloques de prueba e inversiones cuantizadas.
-- **BitMatrix:** celdas binarias derivadas de movimiento y blobs.
-- **ModularGrid:** retículas, subdivisiones y ocupación variable.
-- **PhaseLines:** Lissajous, interferencia y sistemas de líneas pulsantes.
-- **VectorField:** vectores derivados del flujo óptico que persisten después del vídeo.
-- **DataLedger:** coordenadas, metadatos, contadores y matrices numéricas.
-- **SignalTrace:** históricos de señal y rastrogramas.
-- **ThresholdBridge:** rasterización y disolución del vídeo hacia una escena sintética.
+| Generador | Índice | Descripción |
+|---|---|---|
+| **RasterPulse** | 0 | Bandas, obturadores, bloques de prueba e inversiones cuantizadas |
+| **BitMatrix** | 1 | Celdas binarias derivadas de movimiento y blobs |
+| **ModularGrid** | 2 | Retículas, subdivisiones y ocupación variable |
+| **PhaseLines** | 3 | Lissajous, interferencia y sistemas de líneas pulsantes |
+| **VectorField** | 4 | Vectores derivados del flujo óptico que persisten después del vídeo |
+| **DataLedger** | 5 | Coordenadas, metadatos, contadores y matrices numéricas |
+| **SignalTrace** | 6 | Históricos de señal y rastrogramas |
+| **ThresholdBridge** | 7 | Rasterización y disolución del vídeo hacia escena sintética |
+| **Pulse** | 8 | Pulso sincronizado al BPM del compositor: celdas cuadradas que parpadean en unísono |
+| **BarScan** | 9 | Barras de escaneo luminosas independientes por canal, velocidad y fase derivadas del BPM |
+| **GranularRaster** | 10 | Textura granular rasterizada, densidad modulada por energía de movimiento |
+| **OrbitalRings** | 11 | Anillos orbitales — *deshabilitado del programa automático por defecto* |
+| **Strobe** | 12 | Estroboscopio de muro completo sincronizado al pulso de Intercalation |
+| **DividedStrobe** | 13 | Estroboscopio dividido: mitades del muro en fase y contrafase alternadas |
+| **AnalogNoise** | 14 | Ruido analógico de muro completo (evento periódico sincronizado) |
 
-La paleta mantiene negro/blanco con acentos rojos y azul eléctrico. La variación se calcula a partir de semilla, tiempo y datos; no usa aleatoriedad nueva en cada fotograma.
+La paleta de generadores es monocroma: negro/blanco. La variación se calcula a partir de semilla, tiempo y datos; no usa aleatoriedad nueva en cada fotograma.
+
+#### Momentos de instalación
+
+`VisualComposer` organiza el tiempo en tres momentos formales que se suceden en ciclo:
+
+| `InstallationMoment` | Descripción |
+|---|---|
+| **PulseSystem** | Todos los canales ejecutan el generador `Pulse` en unísono al BPM global. Duración configurada en `pulseMomentDuration` (por defecto 24 s). |
+| **BarScanSystem** | Todos los canales ejecutan el generador `BarScan` con fases independientes. Duración en `barScanMomentDuration` (por defecto 32 s). |
+| **Intercalation** | Régimen libre: el compositor programa vídeo, generadores, Breath y transiciones por canal y grupo. La mayor parte del tiempo de instalación vive aquí. |
 
 #### Gramática para ocho pantallas
 
@@ -325,14 +343,31 @@ La paleta mantiene negro/blanco con acentos rojos y azul eléctrico. La variaci�
 
 1. **Unison:** una regla común en los ocho canales, con variaciones mínimas.
 2. **Propagation:** el evento viaja por los canales mediante retardos ordenados.
-3. **Counterpoint:** cada canal asume un rol: cuerpo, trayectoria, velocidad, relaciones, densidad, campo, predicción o metadatos.
-4. **4 + 4:** canales 0–3 observan archivo/presente/cuerpos/movimiento; canales 4–7 interpretan datos/posibilidad/relaciones/predicción.
+3. **Counterpoint:** cada canal asume un rol — cuerpo, trayectoria, velocidad, relaciones, densidad, campo, predicción o metadatos (`ScreenRole`).
+4. **Group4Plus4:** canales 0–3 y canales 4–7 reciben programación de grupo independiente dentro del mismo momento formal.
 
 Cada capítulo generativo recorre **Appearance → Development → Threshold → Transformation → Dissolution**. Las etapas no tienen igual duración: Appearance y Development protegen la legibilidad de la regla; Transformation transfiere retícula, fase, trayectoria, ritmo o máscara al capítulo siguiente; Dissolution puede decaer o terminar con un corte preciso.
 
-`VisualComposer` trabaja en tres escalas: capítulo, frase y arco. Sus elecciones ponderadas excluyen repeticiones recientes y respetan duraciones mínimas. Los estados `Breath` introducen negro, quietud o marcas escasas para evitar actividad constante. El compositor está desactivado por defecto en `settings.json`.
+#### Movimiento colectivo
 
-En modo de ocho canales, `cv.eightChannelEveryNFrames` escalona el análisis CV entre canales y los capítulos sintéticos suspenden decodificación/readback. La vista Overview muestra el coste `Update` en milisegundos por canal para verificar el presupuesto de 30 fps.
+`VisualComposer` infiere un estado de `CollectiveMovement` de los ocho flujos de datos CV para informar al motor de audio SuperCollider de la dinámica global del juego. Los estados son:
+
+`Suspension` · `Codification` · `Accumulation` · `Propagation` · `Convergence` · `Fragmentation` · `Saturation` · `Rupture` · `Residue`
+
+Un candidato debe permanecer estable `collectiveDecisionHold` segundos antes de adoptarse, y cada estado tiene una permanencia mínima protegida (`collectiveMinimumDwell`).
+
+#### Eventos periódicos durante Intercalation
+
+| Evento | Parámetros | Descripción |
+|---|---|---|
+| **Noise event** | `noiseEventInterval` / `noiseEventDuration` | Ruido analógico (`AnalogNoise`) a muro completo durante unos segundos. |
+| **Generator invert** | `generatorInvertInterval` / `generatorInvertDuration` | Los canales en modo generador invierten a fondo blanco/gráficos negros y luego revierten. Los canales en nube de puntos no se ven afectados. |
+| **Polarity invert** | `polarityInvertInterval` / `polarityInvertDuration` | Inversión de polaridad de canal completo (generadores y nubes de puntos). Agenda independiente de generator invert. |
+| **Takeover** | `takeoverIntervalMin/Max` / `takeoverDurationMin/Max` | Un generador ocupa todos los canales simultáneamente y luego el compositor retoma la programación por canal. |
+
+`VisualComposer` trabaja en tres escalas: capítulo, frase y arco. Sus elecciones ponderadas excluyen repeticiones recientes y respetan duraciones mínimas. Los estados `Breath` introducen negro, quietud o marcas escasas para evitar actividad constante. El compositor está **habilitado** por defecto en `settings.json` (`enabled: true`).
+
+En modo de ocho canales, `cv.eightChannelEveryNFrames` escalona el análisis CV entre canales. La vista Overview muestra el coste `Update` en milisegundos por canal para verificar el presupuesto de 30 fps.
 
 ---
 
@@ -340,7 +375,7 @@ En modo de ocho canales, `cv.eightChannelEveryNFrames` escalona el análisis CV 
 
 ### La secuencia como partitura
 
-La secuencia en `buildSequence()` prescribe un orden fijo de técnicas separadas por pausas `BwClean`. Como cada modo dura un tiempo aleatorio, la secuencia es indeterminada en duración pero determinada en orden. `ThermalVision` aparece tres veces, `SlitScan` y `VideoLines` dos veces cada una. Las repeticiones funcionan como estribillos.
+La secuencia en `buildSequence()` prescribe un orden fijo de 18 técnicas separadas por pausas `BwClean`. Como cada modo dura un tiempo aleatorio, la secuencia es indeterminada en duración pero determinada en orden. `ThermalVision` aparece tres veces; `VideoLines`, `VideoNumbers`, `VideoNormal`, `VideoSquares` y `ScanLine` aparecen dos veces cada uno. Las repeticiones funcionan como estribillos.
 
 ### El GlobalDirector
 
