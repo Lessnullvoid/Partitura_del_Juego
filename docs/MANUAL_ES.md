@@ -19,6 +19,7 @@
 11. [Secuencia de apagado](#11-secuencia-de-apagado)
 12. [Diagnóstico de problemas](#12-diagnóstico-de-problemas)
 13. [Referencia rápida](#13-referencia-rápida)
+14. [Generación del paquete de distribución (`dist/`)](#14-generación-del-paquete-de-distribución-dist)
 
 ---
 
@@ -85,30 +86,59 @@ verificar audio y vídeo. Ver sección 4.3.
 
 ## 3. Contenido del paquete
 
-El archivo `Partitura_del_Juego-macOS-arm64.zip` contiene:
+El archivo ZIP descargable contiene la siguiente estructura completa:
 
 ```
-Partitura_del_Juego-macOS-arm64/
-├── Partitura_del_Juego.app        — aplicación visual (ad-hoc signed)
-├── Start Audio.command            — arranca SuperCollider con doble clic
+Partitura_del_Juego-vVERSION-macOS-arm64/
+├── Partitura_del_Juego.app        — aplicación visual (firmada ad-hoc, sin notarizar)
+│   └── Contents/Resources/data/
+│       ├── settings.json          — configuración inicial (outputMode: singleWindow)
+│       └── shaders/               — shaders GLSL compilados
+├── Start Audio.command            — arranca el motor SuperCollider con doble clic
+├── Check Audio.command            — escáner de dispositivos de audio (sin SC)
 ├── README.md                      — guía rápida de distribución
+├── VERSION.txt                    — versión, fecha de compilación, commit git
 ├── SuperCollider/
 │   ├── pdj_launcher.scd           — punto de entrada: detecta DANTE y carga el motor
 │   ├── pdj_audio_config.scd       — configuración del servidor de audio
 │   ├── pdj_datamatics.scd         — motor principal: síntesis, DBAP, OSC
 │   ├── pdj_mode_voices.scd        — voces por modo de partitura gráfica
-│   └── pdj_volumetric_compat.scd  — compatibilidad con runtime volumétrico
+│   └── pdj_volumetric_compat.scd  — compatibilidad OSC con runtime volumétrico
 └── Videos/
-    ├── Portrait/                  — clips para los canales 0–3 (formato retrato)
-    └── Horizontal/                — clips para los canales 4–7 (formato horizontal)
+    ├── Portrait/                  — clips para los canales 0–3 (retrato 9:16)
+    └── Horizontal/                — clips para los canales 4–7 (horizontal 16:9)
 ```
 
-La configuración del usuario se guarda en:
+### Archivos clave explicados
+
+**`Start Audio.command`** — doble clic para arrancar el motor de audio. Ejecuta
+tres pasos automáticos: detecta si Dante Virtual Soundcard está activo, confirma
+el routing de audio con un ping del sistema operativo, y lanza SuperCollider con
+`pdj_launcher.scd`. Dejar la Terminal abierta durante toda la instalación.
+
+**`Check Audio.command`** — escáner independiente que no requiere SuperCollider.
+Doble clic en cualquier momento para ver qué dispositivos de audio están
+disponibles, en qué modo arrancará el motor (DANTE 8ch / estéreo externo /
+altavoces integrados) y si Dante Virtual Soundcard y Dante Controller están
+instalados. No modifica nada. Útil para diagnosticar el estado de audio antes
+de lanzar el motor.
+
+**`VERSION.txt`** — metadatos del build: número de versión, fecha y hora UTC
+de compilación, y hash corto del commit git. Abrirlo con un editor de texto
+para confirmar qué versión exacta está instalada.
+
+**`settings.json` (dentro del `.app`)** — configuración inicial del paquete.
+El script de distribución establece `outputMode: singleWindow` y rutas de
+vídeo relativas para que la app funcione sin dependencias del entorno de
+desarrollo. La configuración activa del usuario se guarda en una ubicación
+separada y tiene prioridad:
+
 ```
 ~/Library/Application Support/PartituraDelJuego/settings.json
 ```
-Este archivo se crea automáticamente en el primer arranque. Eliminarlo
-restablece todos los ajustes a los valores predeterminados del paquete.
+
+Este archivo de usuario se crea en el primer arranque. Eliminarlo restablece
+todos los ajustes a los valores del paquete.
 
 ---
 
@@ -771,3 +801,116 @@ eventos de borrado— producen discontinuidades audibles equivalentes.
 | `~/Library/Application Support/PartituraDelJuego/settings.json` | Configuración activa del usuario (ventanas, clips, CV, compositor) |
 | `SuperCollider/pdj_datamatics.scd` línea `~speakerPositions` | Coordenadas de altavoces en sala |
 | `SuperCollider/pdj_audio_config.scd` línea `blockSize` | Tamaño de bloque del servidor de audio (subir a 512 si hay dropouts) |
+
+---
+
+## 14. Generación del paquete de distribución (`dist/`)
+
+Esta sección es para el equipo técnico que mantiene el código fuente y necesita
+generar un nuevo paquete de distribución desde el repositorio.
+
+### Qué es la carpeta `dist/`
+
+`dist/` es el directorio de salida del script de empaquetado. Su contenido
+está excluido del repositorio git (`.gitignore`) porque los archivos compilados
+y el ZIP pueden superar 1.7 GB. Los paquetes se publican como **GitHub Release assets**.
+
+Estructura típica de `dist/` tras un build:
+
+```
+dist/
+├── Partitura_del_Juego-vVERSION-macOS-arm64/    — carpeta staged (previa al ZIP)
+├── Partitura_del_Juego-vVERSION-macOS-arm64.zip — paquete final listo para distribuir
+└── Partitura_del_Juego-vVERSION-macOS-arm64.zip.sha256 — checksum SHA-256
+```
+
+### Cómo generar un nuevo paquete
+
+Desde la raíz del repositorio, con el proyecto compilado (Xcode o Make):
+
+```sh
+# Con versión explícita (recomendado para releases)
+bash scripts/package_macos_arm64.sh 1.0.0
+
+# Con versión automática basada en fecha y hora UTC
+bash scripts/package_macos_arm64.sh
+```
+
+El script ejecuta los siguientes pasos en orden:
+
+| Paso | Acción |
+|------|--------|
+| 1. Compilación | `make` desde la raíz del repositorio |
+| 2. Staging | Crea `dist/Partitura_del_Juego-vVERSION-macOS-arm64/` |
+| 3. App | Copia `bin/Partitura_del_Juego.app` con `ditto` |
+| 4. Shaders | Copia `bin/data/shaders/` dentro del bundle |
+| 5. Settings | Copia `bin/data/settings.json` y ajusta rutas y `outputMode` |
+| 6. Vídeos | Copia `cortos/` → `Videos/Portrait/` y `bin/data/horizontal/` → `Videos/Horizontal/` |
+| 7. SuperCollider | Copia los cuatro archivos `.scd` desde `supercollider/` |
+| 8. Scripts | Genera `Start Audio.command` y `Check Audio.command` en el staged dir |
+| 9. README | Copia `distribution/README-macOS-test.md` como `README.md` del paquete |
+| 10. VERSION.txt | Escribe versión, fecha UTC y hash git corto |
+| 11. Firma | Ad-hoc signing con `codesign --force --sign -` (no notarizado) |
+| 12. Validación 1 | Verifica arquitectura arm64, dependencias, archivos SC, conteo de vídeos |
+| 13. ZIP | `ditto -c -k` con preservación de metadatos de recursos |
+| 14. SHA-256 | `shasum -a 256` sobre el ZIP |
+| 15. Validación 2 | Extrae el ZIP en un directorio temporal y repite la validación completa |
+
+### Ajustes automáticos en `settings.json`
+
+El script modifica el `settings.json` que entra en el bundle para que el
+paquete sea autónomo:
+
+| Clave | Valor en desarrollo | Valor en el paquete |
+|-------|---------------------|---------------------|
+| `outputMode` | `dualWindow8` | `singleWindow` |
+| `clips.folder` | `../../cortos` | `../../../../Videos/Portrait` |
+| `clips.horizontalFolder` | `horizontal` | `../../../../Videos/Horizontal` |
+| `presentationFullscreen` | `true` | `false` |
+
+El usuario final reconfigura `outputMode` a `dualWindow8` desde la ControlApp
+(botón **Configure Mixed Wall**) al instalar en el espacio físico.
+
+### Publicar el paquete como GitHub Release
+
+El ZIP supera el límite de tamaño de git. Publicarlo como asset de una release:
+
+```sh
+# Crear la release y subir el ZIP y su checksum
+gh release create pdj-video-pointcloud-v1 \
+    dist/Partitura_del_Juego-vVERSION-macOS-arm64.zip \
+    dist/Partitura_del_Juego-vVERSION-macOS-arm64.zip.sha256 \
+    --title "Partitura del Juego — video pointcloud v1" \
+    --notes "Paquete macOS arm64. Ver docs/MANUAL_ES.md para instrucciones."
+```
+
+La URL de descarga resultante tiene la forma:
+```
+https://github.com/Lessnullvoid/Partitura_del_Juego/releases/download/TAG/Partitura_del_Juego-vVERSION-macOS-arm64.zip
+```
+
+### Requisitos previos del script
+
+El script verifica la presencia de los siguientes comandos antes de ejecutar:
+
+```
+make  ditto  codesign  otool  plutil  file  python3  shasum  xattr
+```
+
+Todos están preinstalados en macOS con Xcode Command Line Tools (`xcode-select --install`).
+
+### Verificar un paquete ya generado
+
+Para confirmar la integridad de un ZIP ya existente:
+
+```sh
+# Verificar el checksum
+cd dist
+shasum -a 256 -c Partitura_del_Juego-vVERSION-macOS-arm64.zip.sha256
+
+# Verificar la firma de la app dentro del ZIP
+ditto -x -k Partitura_del_Juego-vVERSION-macOS-arm64.zip /tmp/pdj-verify/
+codesign --verify --deep --strict --verbose=2 \
+    /tmp/pdj-verify/Partitura_del_Juego-vVERSION-macOS-arm64/Partitura_del_Juego.app
+rm -rf /tmp/pdj-verify/
+```
