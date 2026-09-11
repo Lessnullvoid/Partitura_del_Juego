@@ -10,6 +10,12 @@ El modo de salida activo es `dualWindow8`. El compositor visual (`VisualComposer
 
 [SHA-256](https://github.com/Lessnullvoid/Partitura_del_Juego/releases/download/pdj-video-pointcloud-v1/Partitura_del_Juego-macOS-arm64.zip.sha256) · [Todas las versiones](https://github.com/Lessnullvoid/Partitura_del_Juego/releases)
 
+**Documentación:**
+- [Manual de instalación y operación](docs/MANUAL_ES.md) — guía completa: hardware, DANTE, arranque, ControlApp, apagado, diagnóstico
+- [Audio multicanal DANTE](docs/AUDIO_MULTICHANNEL_ES.md) — motor SuperCollider, DBAP, calibración de altavoces, troubleshooting
+- [Distribución macOS](distribution/README-macOS-test.md) — estructura del paquete y prueba de humo
+- [Formato PDJV](docs/pdjv/PDJV_FORMAT.md) — especificación del formato de análisis fuera de línea
+
 ---
 
 ## Concepto
@@ -1069,17 +1075,45 @@ Opcionales según sala: extensiones eléctricas, canaletas o cinta gaffer para e
 
 ## Referencia de montaje
 
-Las dos vistas siguientes son la referencia espacial del montaje: las pantallas no forman un muro continuo sino que se dispersan por la sala sobre estructuras tubulares verticales de suelo a techo, de modo que el público camina entre ellas y nunca ve las ocho a la vez.
+Las dos configuraciones siguientes son variantes de la disposición espacial del montaje: las pantallas no forman un muro continuo sino que se dispersan por la sala sobre estructuras tubulares verticales de suelo a techo, de modo que el público camina entre ellas y nunca ve las ocho a la vez. Cada vista muestra planta y perspectiva isométrica del modelo 3D de referencia.
 
-![Vista de montaje 1 — dispersión de las ocho pantallas verticales](img/setup1.jpeg)
+**Configuración 1 — disposición lineal en L**
+
+![Configuración 1: planta e isométrico — disposición lineal en L, pantallas en retrato sobre bastidores](img/conf1.jpeg)
 
 Cada estructura sostiene uno o dos paneles en vertical, sujetos por bridas o abrazaderas a los tubos. Los paneles se montan a la altura del cuerpo (centro de imagen aproximadamente a la altura de la mirada) y ligeramente girados entre sí, sin alineación frontal: las orientaciones cruzadas hacen que el espectador reciba siempre algunas pantallas de frente y otras en ángulo agudo, reforzando la lectura de las ocho columnas como polirritmia y no como una única imagen panorámica.
 
-![Vista de montaje 2 — recorrido y volumen técnico central](img/setup2.jpeg)
+**Configuración 2 — disposición en rombo**
 
-La segunda vista muestra la circulación resultante y el volumen cilíndrico negro que concentra la parte técnica del montaje: dentro se ocultan los ordenadores, el multicontacto, el router y el recogido de cables, que suben por los tubos hasta cada panel. La sala se mantiene en penumbra sin iluminación añadida —la única fuente de luz son las propias pantallas—, y el suelo se deja libre de cableado visible.
+![Configuración 2: planta e isométrico — disposición en rombo, bastidores girados 45°](img/conf2.jpeg)
+
+La disposición en rombo distribuye los bastidores en diagonal respecto al eje de circulación, creando un recorrido espiral y eliminando cualquier lectura frontal del conjunto. La sala se mantiene en penumbra sin iluminación añadida —la única fuente de luz son las propias pantallas—, y el suelo se deja libre de cableado visible.
 
 Nota sobre el ancho lógico: la cifra de 8640 px (8 × 1080) descrita en la arquitectura es la resolución total del sistema, no una dimensión física continua. Cada canal es una imagen autónoma y completa, por lo que el reparto espacial de los paneles puede adaptarse a la planta de cada sala sin modificar el software.
+
+---
+
+## Capturas del sistema en funcionamiento
+
+Las tres capturas siguientes muestran el sistema corriendo con los ocho canales activos. Cada imagen incluye las dos ventanas de presentación (Presentation A arriba a la izquierda, Presentation B arriba a la derecha) y la Terminal con el log de SuperCollider.
+
+**Modo Waveform + BitMatrix + nube de puntos — movimiento colectivo: fragmentation**
+
+![Sistema en marcha: Waveform, BitMatrix granular y nube de puntos por GPU — estado fragmentation](img/screen1.png)
+
+Canales 0–3 (Presentation A) con modos Waveform (barras horizontales de historial de movimiento) y BitMatrix (campo granular de puntos sobre vídeo deportivo). Canal derecho con nube de puntos GPU en modo disperso. El log muestra generadores `pulse` y `dividedStrobe/rupture` activos, movimiento colectivo `fragmentation` con actividad 0.53 y convergencia 0.25.
+
+**Modo VideoNumbers + AnalogNoise + nube de puntos dispersa**
+
+![Sistema en marcha: VideoNumbers (dígitos grandes) y nube de puntos dispersa — transición de escena](img/screen2.png)
+
+Presentation A muestra tres modos simultáneos: BitMatrix de baja densidad (izquierda), VideoNumbers en escala grande con dígitos 1–9 mapeados al brillo del vídeo (centro), y nube de puntos en campo oscuro (derecha). Presentation B (arriba) con modo Waveform en barras horizontales finas. El log registra múltiples `evolution` de canal con stages y posiciones normalizadas.
+
+**Modo PhaseLines + VideoNumbers denso + VideoPointCloud con figura humana**
+
+![Sistema en marcha: PhaseLines (ondas), VideoNumbers denso y nube de puntos con figura humana visible](img/screen3.png)
+
+Presentation A muestra PhaseLines/SignalTrace (curvas senoidales en blanco sobre negro) en los canales izquierdo y central, VideoNumbers con rejilla densa de dígitos 0–9 (canal central derecho), y VideoPointCloud con figura humana extraída como nube de puntos (canal derecho). Presentation B (arriba) con PhaseLines activo en dos canales. El log confirma generadores `negativeSpace`, `bitMatrix` y `modularGrid` activos.
 
 ---
 
