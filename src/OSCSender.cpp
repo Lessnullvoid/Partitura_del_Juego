@@ -11,6 +11,14 @@ void OSCSender::reconnect() {
     ofLogNotice("OSCSender") << "Sending to " << host_ << ":" << port_;
 }
 
+void OSCSender::sendMasterVolume(float volume, int replyPort) {
+    ofxOscMessage message;
+    message.setAddress("/pdj/audio/master");
+    message.addFloatArg(ofClamp(volume, 0.f, 1.f));
+    message.addIntArg(replyPort);
+    sender_.sendMessage(message, false);
+}
+
 void OSCSender::send(const CVData& d) {
     int ch = d.channelIdx;
     std::string base = "/pdj/channel/" + ofToString(ch);

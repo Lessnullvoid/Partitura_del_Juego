@@ -10,11 +10,14 @@
 #include "VideoDirector.h"
 #include "VisualComposer.h"
 #include "VideoPointCloudGenerator.h"
-#include <CoreGraphics/CoreGraphics.h>
+#include "DisplayProbe.h"
+#include "WallIdentify.h"
+#include "PresentationSafety.h"
 #include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <limits.h>
+#include <memory>
 
 namespace {
 void configureBundledDataPath() {
@@ -122,6 +125,12 @@ int main() {
         composerParams.dualVideoProbability =
             c.value("dualVideoProbability",
                     composerParams.dualVideoProbability);
+        composerParams.thermalVideoProbability =
+            c.value("thermalVideoProbability",
+                    composerParams.thermalVideoProbability);
+        composerParams.computerVisionVideoProbability =
+            c.value("computerVisionVideoProbability",
+                    composerParams.computerVisionVideoProbability);
         composerParams.takeoverIntervalMin =
             c.value("takeoverIntervalMin",
                     composerParams.takeoverIntervalMin);
@@ -396,117 +405,106 @@ int main() {
                           : PresentationApp::WallLayout::Strips4x1;
     };
     ofLogNotice("main") << "Wall layout A: " << layoutA
-                        << "  Wall layout B: " << layoutB;
+                        << "  Wall layout B: " << layoutB
+                        << "  -> segA: "
+                        << (layoutA == "2x2" ? "960x540" : "480x1080")
+                        << "  segB: "
+                        << (layoutB == "2x2" ? "960x540" : "480x1080");
 
-    if (outputMode == "auto") {
-        uint32_t numDisplays = 0;
-        CGGetActiveDisplayList(0, nullptr, &numDisplays);
-        std::vector<CGDirectDisplayID> dispIDs(numDisplays);
-        CGGetActiveDisplayList(numDisplays, dispIDs.data(), &numDisplays);
+    auto identify = std::make_shared<WallIdentifyState>();
+    auto safety = std::make_shared<PresentationSafety>();
+    if (cfg.contains("videoWallController") &&
+        cfg["videoWallController"].is_object()) {
+        const auto& vwc = cfg["videoWallController"];
+        if (vwc.contains("wallA") && vwc["wallA"].is_object())
+            identify->wallARotationDegrees.store(
+                vwc["wallA"].value("rotationDegrees", 90));
+        if (vwc.contains("wallB") && vwc["wallB"].is_object())
+            identify->wallBRotationDegrees.store(
+                vwc["wallB"].value("rotationDegrees", 0));
+    }
 
-        struct DisplayChoice {
-            CGDirectDisplayID id;
-            size_t area;
-            bool is4K;
-        };
-        std::vector<DisplayChoice> external4K;
-        std::vector<DisplayChoice> externalChoices;
-        std::vector<DisplayChoice> allChoices;
-        CGDirectDisplayID bestID = kCGNullDirectDisplay;
-        bool bestIs4K = false;
+    const auto applyPairGeometry = [&](const DisplayProbe::WallPair& pair) {
+        swX = static_cast<int>(pair.wallA.bounds.origin.x);
+        swY = static_cast<int>(pair.wallA.bounds.origin.y);
+        swW = static_cast<int>(pair.wallA.bounds.size.width);
+        swH = static_cast<int>(pair.wallA.bounds.size.height);
+        sw2X = static_cast<int>(pair.wallB.bounds.origin.x);
+        sw2Y = static_cast<int>(pair.wallB.bounds.origin.y);
+        sw2W = static_cast<int>(pair.wallB.bounds.size.width);
+        sw2H = static_cast<int>(pair.wallB.bounds.size.height);
+    };
 
-        for (uint32_t i = 0; i < numDisplays; ++i) {
-            CGDirectDisplayID dID = dispIDs[i];
-            const size_t physW = CGDisplayPixelsWide(dID);
-            const size_t physH = CGDisplayPixelsHigh(dID);
-            const size_t area = physW * physH;
-            const bool is4K = physW >= 3840;
-            const DisplayChoice choice{dID, area, is4K};
-            allChoices.push_back(choice);
-            if (!CGDisplayIsMain(dID)) {
-                externalChoices.push_back(choice);
-                if (is4K) external4K.push_back(choice);
-            }
-        }
-
-        const auto byTierAndArea = [](const DisplayChoice& a,
-                                      const DisplayChoice& b) {
-            if (a.is4K != b.is4K) return a.is4K > b.is4K;
-            return a.area > b.area;
-        };
-        std::sort(external4K.begin(), external4K.end(), byTierAndArea);
-        std::sort(externalChoices.begin(), externalChoices.end(), byTierAndArea);
-        std::sort(allChoices.begin(), allChoices.end(), byTierAndArea);
-
-        if (external4K.size() >= 2) {
-            const CGRect a = CGDisplayBounds(external4K[0].id);
-            const CGRect b = CGDisplayBounds(external4K[1].id);
-            swX = (int)a.origin.x; swY = (int)a.origin.y;
-            swW = (int)a.size.width; swH = (int)a.size.height;
-            sw2X = (int)b.origin.x; sw2Y = (int)b.origin.y;
-            sw2W = (int)b.size.width; sw2H = (int)b.size.height;
-            outputMode = "dualWindow8";
-            ofLogNotice("main") << "Auto-selected two 4K outputs for 8 screens";
-        } else {
-            // Autodetección del par ICUIXIAN: dos salidas externas 1920x1080.
-            // La más a la izquierda es Wall A (4x1 vertical, rotación ICUIXIAN 90 deg).
-            // La más a la derecha es Wall B (2x2 horizontal, rotación ICUIXIAN 0 deg).
-            std::vector<DisplayChoice> icuixian;
-            for (const auto& d : externalChoices) {
-                const CGRect r = CGDisplayBounds(d.id);
-                if (static_cast<int>(r.size.width)  == 1920 &&
-                    static_cast<int>(r.size.height) == 1080)
-                    icuixian.push_back(d);
-            }
-            if (icuixian.size() >= 2) {
-                std::sort(icuixian.begin(), icuixian.end(),
-                          [](const DisplayChoice& a, const DisplayChoice& b) {
-                              const CGRect ra = CGDisplayBounds(a.id);
-                              const CGRect rb = CGDisplayBounds(b.id);
-                              if (ra.origin.x != rb.origin.x)
-                                  return ra.origin.x < rb.origin.x;
-                              return ra.origin.y < rb.origin.y;
-                          });
-                const CGRect rA = CGDisplayBounds(icuixian[0].id);
-                const CGRect rB = CGDisplayBounds(icuixian[1].id);
-                swX  = (int)rA.origin.x; swY  = (int)rA.origin.y;
-                swW  = (int)rA.size.width;  swH  = (int)rA.size.height;
-                sw2X = (int)rB.origin.x; sw2Y = (int)rB.origin.y;
-                sw2W = (int)rB.size.width;  sw2H = (int)rB.size.height;
-                layoutA = "4x1";
-                layoutB = "2x2";
-                outputMode = "dualWindow8";
-                ofLogNotice("main")
-                    << "Auto-detected ICUIXIAN pair:"
-                    << " Wall A (4x1 portrait, rot 90) @ "
-                    << swX << "," << swY << " " << swW << "x" << swH
-                    << "  Wall B (2x2 landscape, rot 0) @ "
-                    << sw2X << "," << sw2Y << " " << sw2W << "x" << sw2H;
-            } else {
-                const auto& fallback =
-                    externalChoices.empty() ? allChoices : externalChoices;
-                if (!fallback.empty()) {
-                    bestID = fallback.front().id;
-                    bestIs4K = fallback.front().is4K;
+    if (outputMode == "dualWindow8" || outputMode == "auto") {
+        DisplayProbe::WallPair pair = DisplayProbe::pickLaunchPair();
+        if (pair.valid) {
+            if (pair.needsModeSwitch) {
+                std::string modeError;
+                if (!DisplayProbe::switchPairToIcuixianMode(pair, &modeError)) {
+                    ofLogWarning("main") << "Could not switch ICUIXIAN modes: "
+                                         << modeError;
                 }
             }
-        }
-
-        if (outputMode == "auto" && bestID != kCGNullDirectDisplay) {
-            CGRect bounds = CGDisplayBounds(bestID);
-            swX = (int)bounds.origin.x;
-            swY = (int)bounds.origin.y;
-            swW = (int)bounds.size.width;
-            swH = (int)bounds.size.height;
-            outputMode = "singleWindow";
-            ofLogNotice("main") << "Auto-selected display: "
-                << swW << "x" << swH
-                << " at (" << swX << ", " << swY << ")"
-                << (bestIs4K ? " [4K+]" : " [largest available]")
-                << (CGDisplayIsMain(bestID) ? " [primary]" : " [external]");
+            DisplayProbe::refreshBounds(pair);
+            if (pair.wallA.currently1080 && pair.wallB.currently1080) {
+                const bool autoMixed = outputMode == "auto";
+                if (autoMixed) {
+                    layoutA = "4x1";
+                    layoutB = "2x2";
+                    outputMode = "dualWindow8";
+                }
+                applyPairGeometry(pair);
+                const DisplayProbe::WallPreset preset =
+                    layoutB == "2x2" ? DisplayProbe::WallPreset::Mixed
+                                     : DisplayProbe::WallPreset::DualPortrait;
+                DisplayProbe::applyPairToSettings(cfg, pair, preset);
+                layoutA = cfg["presentationWindows"][0].value("layout", layoutA);
+                layoutB = cfg["presentationWindows"][1].value("layout", layoutB);
+                identify->wallARotationDegrees.store(
+                    preset == DisplayProbe::WallPreset::Mixed ? 90 : 90);
+                identify->wallBRotationDegrees.store(
+                    preset == DisplayProbe::WallPreset::Mixed ? 0 : 90);
+                std::string saveError;
+                if (!SettingsStore::save(cfg, &saveError)) {
+                    ofLogWarning("main")
+                        << "Could not persist auto wall assignment: "
+                        << saveError;
+                }
+                ofLogNotice("main")
+                    << "Live wall pair: "
+                    << DisplayProbe::describePair(pair, preset);
+            }
         } else if (outputMode == "auto") {
-            ofLogWarning("main") << "No displays enumerated - falling back to multiWindow";
-            outputMode = "multiWindow";
+            std::vector<DisplayProbe::DisplayInfo> fallback =
+                DisplayProbe::listExternalDisplays();
+            if (fallback.empty()) {
+                for (auto& display : DisplayProbe::listDisplays()) {
+                    if (!display.mirrored) fallback.push_back(display);
+                }
+            }
+            std::sort(fallback.begin(), fallback.end(),
+                      [](const DisplayProbe::DisplayInfo& a,
+                         const DisplayProbe::DisplayInfo& b) {
+                          return (a.pixelWidth * a.pixelHeight) >
+                                 (b.pixelWidth * b.pixelHeight);
+                      });
+            if (!fallback.empty()) {
+                const auto& best = fallback.front();
+                swX = static_cast<int>(best.bounds.origin.x);
+                swY = static_cast<int>(best.bounds.origin.y);
+                swW = static_cast<int>(best.bounds.size.width);
+                swH = static_cast<int>(best.bounds.size.height);
+                outputMode = "singleWindow";
+                ofLogNotice("main") << "Auto-selected display: "
+                    << swW << "x" << swH
+                    << " at (" << swX << ", " << swY << ")"
+                    << (best.is4K ? " [4K+]" : " [largest available]")
+                    << (best.builtin ? " [primary]" : " [external]");
+            } else {
+                ofLogWarning("main")
+                    << "No displays enumerated - falling back to multiWindow";
+                outputMode = "multiWindow";
+            }
         }
     }
 
@@ -519,6 +517,8 @@ int main() {
     }
     videoDir->setup(pool.get(), videoParams, eightChannelOutput ? 8 : 4);
     visualComposer->setup(composerParams, eightChannelOutput ? 8 : 4);
+    videoDir->setPresentationSafety(safety.get());
+    visualComposer->setPresentationSafety(safety.get());
     auto performanceMonitor = std::make_shared<PerformanceMonitor>(
         eightChannelOutput ? 8 : 4);
     performanceMonitor->configure(performanceConfig, targetFPS, outputMode);
@@ -554,8 +554,10 @@ int main() {
         generatorRuntime.detailTier =
             g.value("detailTier", generatorRuntime.detailTier);
     }
-    for (int i = 0; i < videoDir->channelCount(); ++i)
+    for (int i = 0; i < videoDir->channelCount(); ++i) {
         channels[i].generatorParams() = generatorRuntime;
+        channels[i].setPresentationSafety(safety.get());
+    }
 
     bool invertPolarity = false;
     if (cfg.contains("visuals"))
@@ -596,7 +598,8 @@ int main() {
             chVec.push_back(&channels[i]);
         auto ctrlApp = std::make_shared<ControlApp>(
             chVec, pool.get(), oscSender.get(), globalDir.get(), videoDir.get(),
-            visualComposer.get(), performanceMonitor.get(), oscListenPort);
+            visualComposer.get(), performanceMonitor.get(), oscListenPort,
+            identify.get(), safety.get());
         ofRunApp(ctrlWindow, ctrlApp);
     };
 
@@ -618,7 +621,8 @@ int main() {
         auto firstApp = std::make_shared<PresentationApp>(
             groupA, 0, swW, swH, pool.get(), oscSender.get(), cvp,
             globalDir.get(), videoDir.get(), visualComposer.get(),
-            performanceMonitor.get(), 0, targetFPS, parseWallLayout(layoutA));
+            performanceMonitor.get(), 0, targetFPS, parseWallLayout(layoutA),
+            identify.get());
         ofRunApp(firstWindow, firstApp);
 
         ofGLFWWindowSettings secondSettings;
@@ -636,7 +640,8 @@ int main() {
         auto secondApp = std::make_shared<PresentationApp>(
             groupB, 4, sw2W, sw2H, pool.get(), oscSender.get(), cvp,
             globalDir.get(), videoDir.get(), visualComposer.get(),
-            performanceMonitor.get(), 1, targetFPS, parseWallLayout(layoutB));
+            performanceMonitor.get(), 1, targetFPS, parseWallLayout(layoutB),
+            identify.get());
         ofRunApp(secondWindow, secondApp);
         makeControlApp(firstWindow);
     } else if (outputMode == "singleWindow") {
@@ -654,7 +659,8 @@ int main() {
         auto presApp = std::make_shared<PresentationApp>(
             chPtrs, 0, swW, swH, pool.get(), oscSender.get(), cvp,
             globalDir.get(), videoDir.get(), visualComposer.get(),
-            performanceMonitor.get(), 0, targetFPS);
+            performanceMonitor.get(), 0, targetFPS,
+            PresentationApp::WallLayout::Strips4x1, identify.get());
         ofRunApp(presWindow, presApp);
         makeControlApp(presWindow);
     } else {

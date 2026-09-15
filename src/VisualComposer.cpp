@@ -97,6 +97,8 @@ void VisualComposer::update(float globalSpeed) {
     }
     lastTime_ = now;
 
+    evacuateHiddenLandscapeVideo();
+
     if (!params_.enabled) {
         wasEnabled_ = false;
         subdivisionPulse_ = false;
@@ -617,7 +619,7 @@ void VisualComposer::notifyVideoFinished(int channel) {
 }
 
 bool VisualComposer::shouldRequestVideo(int channel) const {
-    if (!params_.enabled || !validChannel(channel)) {
+    if (!params_.enabled || !validChannel(channel) || !videoAllowedOn(channel)) {
         return false;
     }
     const ChapterState& state = states_[static_cast<std::size_t>(channel)];
@@ -806,6 +808,8 @@ void VisualComposer::beginIntercalation() {
         const int count = std::min(4, channelCount() - first);
         const int selected = first +
             static_cast<int>(randomUnit() * count) % std::max(1, count);
+        if (!videoAllowedOn(selected))
+            continue;
         beginChapter(selected, ContentType::Video, chooseGenerator(selected),
                      TargetScope::Channel, group, true);
     }
@@ -866,7 +870,7 @@ void VisualComposer::scheduleNextTakeover() {
 }
 
 void VisualComposer::ensureVideoReplacement(int departingChannel) {
-    if (!validChannel(departingChannel))
+    if (!validChannel(departingChannel) || !videoAllowedOn(departingChannel))
         return;
     const int group = groupFor(departingChannel);
     if (activeVideoCount(group) > 1)
@@ -877,6 +881,7 @@ void VisualComposer::ensureVideoReplacement(int departingChannel) {
         const int candidate =
             first + (departingChannel - first + offset) % count;
         if (candidate == departingChannel ||
+            !videoAllowedOn(candidate) ||
             states_[static_cast<std::size_t>(candidate)].content ==
                 ContentType::Video)
             continue;
@@ -888,6 +893,19 @@ void VisualComposer::ensureVideoReplacement(int departingChannel) {
 }
 
 ContentType VisualComposer::chooseConstrainedContent(int channel) {
+    if (!videoAllowedOn(channel)) {
+        float weights[3] = {
+            std::max(0.f, params_.generatorProbability),
+            std::max(0.f, params_.breathProbability),
+            std::max(0.f, params_.transitionProbability)
+        };
+        if (neighborUsesContent(channel, ContentType::Breath))
+            weights[1] = 0.f;
+        const int selected = weightedIndex(weights, 3);
+        return selected == 0 ? ContentType::Generator
+                             : selected == 1 ? ContentType::Breath
+                                             : ContentType::Transition;
+    }
     const int group = groupFor(channel);
     const int videos = activeVideoCount(group);
     const bool currentlyVideo =
@@ -921,6 +939,8 @@ void VisualComposer::beginChapter(int channel, ContentType content, int generato
     if (!validChannel(channel)) {
         return;
     }
+    if (content == ContentType::Video && !videoAllowedOn(channel))
+        content = ContentType::Generator;
 
     ChapterState& state = states_[static_cast<std::size_t>(channel)];
     state.content = content;
@@ -954,6 +974,20 @@ void VisualComposer::beginChapter(int channel, ContentType content, int generato
     state.envelope = 0.f;
     state.videoRequested = content == ContentType::Video;
     state.videoPlaying = false;
+    if (content == ContentType::Video) {
+        // Sorteo en cascada: primero termico, luego computer vision, resto nube de puntos.
+        const float roll = randomUnit();
+        if (roll < params_.thermalVideoProbability) {
+            state.videoDisplayMode = VideoDisplayMode::Thermal;
+        } else if (roll < params_.thermalVideoProbability +
+                              params_.computerVisionVideoProbability) {
+            state.videoDisplayMode = VideoDisplayMode::ComputerVision;
+        } else {
+            state.videoDisplayMode = VideoDisplayMode::PointCloud;
+        }
+    } else {
+        state.videoDisplayMode = VideoDisplayMode::PointCloud;
+    }
     videoFinished_[static_cast<std::size_t>(channel)] = false;
     state.revision = ++revision_;
     std::uint32_t mixed = params_.seed ^ static_cast<std::uint32_t>(channel + 1);
@@ -1049,6 +1083,8 @@ ContentType VisualComposer::chooseContent(int channel) {
         std::max(0.f, params_.breathProbability),
         std::max(0.f, params_.transitionProbability)
     };
+    if (!videoAllowedOn(channel))
+        weights[contentIndex(ContentType::Video)] = 0.f;
 
     const ContentType current = validChannel(channel)
                                     ? states_[static_cast<std::size_t>(channel)].content
@@ -1323,4 +1359,19 @@ float VisualComposer::clamp01(float value) {
 
 int VisualComposer::groupFor(int channel) {
     return channel < 4 ? 0 : 1;
+}
+
+bool VisualComposer::videoAllowedOn(int channel) const {
+    return !(safety_ && safety_->hidesChannel(channel));
+}
+
+void VisualComposer::evacuateHiddenLandscapeVideo() {
+    if (!safety_ || !safety_->active() || !params_.enabled) return;
+    for (int channel = 0; channel < channelCount(); ++channel) {
+        if (!safety_->hidesChannel(channel)) continue;
+        ChapterState& state = states_[static_cast<std::size_t>(channel)];
+        if (state.content != ContentType::Video) continue;
+        beginChapter(channel, ContentType::Generator, chooseGenerator(channel),
+                     TargetScope::Channel, groupFor(channel), true);
+    }
 }

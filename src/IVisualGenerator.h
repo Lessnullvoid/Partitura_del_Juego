@@ -3,8 +3,11 @@
 #include "ofMain.h"
 #include <string>
 
+struct CVData;
+
 enum class PointCloudDepthSource { Luminance, PdjvDepth, Hybrid };
 enum class PointCloudMaskMode { FullFrame, PlayersOnly, PlayersEmphasized };
+enum class PointCloudColorMode { Monochrome, Thermal, ComputerVision };
 
 struct VideoPointCloudSettings {
     bool enabled = true;
@@ -19,6 +22,7 @@ struct VideoPointCloudSettings {
     float luminanceCeiling = 1.f;
     float gamma = 1.f;
     float colorGain = 1.f;
+    PointCloudColorMode colorMode = PointCloudColorMode::Monochrome;
     float opacity = 0.9f;
     bool zInvert = false;
     float xyScale = 2.f;
@@ -66,6 +70,7 @@ struct VideoGeneratorContext {
     const PdjvFrameView* analysisFrame = nullptr;
     const ofTexture* maskTexture = nullptr;
     const ofTexture* depthTexture = nullptr;
+    const CVData* cvData = nullptr;
     float transitionAmount = 0.f;
 };
 

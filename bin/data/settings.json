@@ -32,7 +32,7 @@
         }
     ],
     "_installationLayout_comment": "4 vertical 1080x1920 monitors \u2014 swap in for installation:",
-    "_note": "Two ICUIXIAN 0104-XZ controllers. Wall A (presentationWindows[0], layout 4x1): four portrait strips sent to controller A configured as 4x1 with 90 deg rotation -> 4 x 1080x1920 portrait panels. Wall B (presentationWindows[1], layout 2x2): 2x2 grid sent to controller B configured as 2x2 with 0 deg rotation -> 4 x 1920x1080 landscape panels. Use Configure ICUIXIAN outputs (Wall A) or Configure Mixed Wall (Wall A + B) in the GUI to detect, switch and save desktop positions.",
+    "_note": "Two ICUIXIAN 0104-XZ controllers. Thunderbolt/USB-C is Wall A (presentationWindows[0], layout 4x1): four portrait strips sent to controller A configured as 4x1 with 90 deg rotation -> 4 x 1080x1920 portrait panels. Laptop HDMI is Wall B (presentationWindows[1], layout 2x2): 2x2 grid sent to controller B configured as 2x2 with 0 deg rotation -> 4 x 1920x1080 landscape panels. dualWindow8 auto-places both windows from live display geometry at launch. Use Identify A/B in the GUI to confirm OUT1-4 order, Swap A/B if assignment is reversed, or Configure Mixed Wall to force 1080p60.",
     "_testLayout": [
         {
             "height": 480,
@@ -156,6 +156,9 @@
         ],
         "showHud": false
     },
+    "audio": {
+        "masterVolume": 0.55
+    },
     "osc": {
         "host": "localhost",
         "listenPort": 9002,
@@ -208,6 +211,7 @@
         "model": "0104-XZ",
         "refreshHz": 60.0,
         "wallA": {
+            "connector": "thunderbolt",
             "layout": "4x1",
             "layoutPerController": "4x1",
             "panels": 4,
@@ -215,6 +219,7 @@
             "rotationDegrees": 90
         },
         "wallB": {
+            "connector": "hdmi",
             "layout": "2x2",
             "layoutPerController": "2x2",
             "panels": 4,

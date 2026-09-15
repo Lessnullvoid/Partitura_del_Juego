@@ -1,6 +1,7 @@
 #pragma once
 #include "ofMain.h"
 #include "ClipPool.h"
+#include "PresentationSafety.h"
 #include <array>
 #include <limits>
 
@@ -44,6 +45,7 @@ public:
 
     void setup(ClipPool* pool, const VideoDirectorParams& params = {},
                int channelCount = 4);
+    void setPresentationSafety(PresentationSafety* safety) { safety_ = safety; }
     void update(float globalSpeed = 1.f);
 
     VideoDirectorParams&       params()       { return params_; }
@@ -82,8 +84,10 @@ private:
     void beginShared(float now);
     void finishShared(float now);
     bool validChannel(int channelIdx) const;
+    bool hidesLandscapeChannel(int channelIdx) const;
 
     ClipPool* pool_ = nullptr;
+    PresentationSafety* safety_ = nullptr;
     int channelCount_ = 4;
     VideoDirectorParams params_;
     std::array<VideoPlan, kChannelCount> plans_;

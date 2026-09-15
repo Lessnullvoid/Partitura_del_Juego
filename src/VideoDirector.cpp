@@ -51,7 +51,8 @@ void VideoDirector::update(float globalSpeed) {
         beginShared(now);
     } else if (sharedState_ == SharedState::Loading) {
         bool allReady = true;
-        for (const auto& state : ready_) allReady = allReady && state.ready;
+        for (int i = 0; i < channelCount_; ++i)
+            allReady = allReady && ready_[i].ready;
         if (allReady) {
             sharedMediaSeconds_ = ready_[0].start;
             sharedEndSeconds_ = ready_[0].end;
@@ -151,6 +152,7 @@ VideoPlanType VideoDirector::chooseType() const {
 
 void VideoDirector::scheduleIndependent(int channelIdx) {
     if (!validChannel(channelIdx) || !pool_) return;
+    if (hidesLandscapeChannel(channelIdx)) return;
     const std::string path = pool_->getIndependentClip(channelIdx);
     if (path.empty()) return;
 
@@ -189,6 +191,10 @@ void VideoDirector::beginShared(float now) {
         VideoPlan planA = makePlan(pathA, true);
         const int groupAEnd = std::min(threshold, channelCount_);
         for (int i = 0; i < groupAEnd; ++i) {
+            if (hidesLandscapeChannel(i)) {
+                ready_[i].ready = true;
+                continue;
+            }
             planA.revision = ++nextRevision_[i];
             plans_[i] = planA;
             waitingForPlan_[i] = false;
@@ -203,6 +209,10 @@ void VideoDirector::beginShared(float now) {
     if (channelCount_ > threshold && !effectivePathB.empty()) {
         VideoPlan planB = makePlan(effectivePathB, true);
         for (int i = threshold; i < channelCount_; ++i) {
+            if (hidesLandscapeChannel(i)) {
+                ready_[i].ready = true;
+                continue;
+            }
             planB.revision = ++nextRevision_[i];
             plans_[i] = planB;
             waitingForPlan_[i] = false;
@@ -227,4 +237,8 @@ void VideoDirector::finishShared(float now) {
 
 bool VideoDirector::validChannel(int channelIdx) const {
     return channelIdx >= 0 && channelIdx < channelCount_;
+}
+
+bool VideoDirector::hidesLandscapeChannel(int channelIdx) const {
+    return safety_ && safety_->hidesChannel(channelIdx);
 }

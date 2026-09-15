@@ -1,4 +1,6 @@
 #include "VideoPointCloudGenerator.h"
+#include "OSCSender.h"
+#include <array>
 #include <cmath>
 
 VideoPointCloudSettings VideoPointCloudSettings::fromJson(const ofJson& cfg) {
@@ -38,6 +40,14 @@ void VideoPointCloudSettings::applyJson(const ofJson& cfg) {
     luminanceCeiling = cfg.value("luminanceCeiling", luminanceCeiling);
     gamma = cfg.value("gamma", gamma);
     colorGain = cfg.value("colorGain", colorGain);
+    const std::string colorModeName =
+        cfg.value("colorMode", std::string("Monochrome"));
+    if (colorModeName == "Thermal")
+        colorMode = PointCloudColorMode::Thermal;
+    else if (colorModeName == "ComputerVision")
+        colorMode = PointCloudColorMode::ComputerVision;
+    else if (cfg.contains("colorMode"))
+        colorMode = PointCloudColorMode::Monochrome;
     opacity = cfg.value("opacity", opacity);
     zInvert = cfg.value("zInvert", zInvert);
     xyScale = cfg.value("xyScale", xyScale);
@@ -209,6 +219,24 @@ void VideoPointCloudGenerator::bindUniforms(const VideoGeneratorContext& context
     shader_.setUniform1f("luminanceCeiling", settings_.luminanceCeiling);
     shader_.setUniform1f("gammaVal", settings_.gamma);
     shader_.setUniform1f("colorGain", settings_.colorGain);
+    shader_.setUniform1i("colorMode", static_cast<int>(settings_.colorMode));
+    constexpr int kMaxCvBlobs = 8;
+    std::array<glm::vec4, kMaxCvBlobs> cvBlobs{};
+    int cvBlobCount = 0;
+    if (context.cvData) {
+        cvBlobCount = std::min(
+            static_cast<int>(context.cvData->blobs.size()), kMaxCvBlobs);
+        for (int i = 0; i < cvBlobCount; ++i) {
+            const CVData::BlobEntry& blob =
+                context.cvData->blobs[static_cast<std::size_t>(i)];
+            cvBlobs[static_cast<std::size_t>(i)] = glm::vec4(
+                blob.x, blob.y, blob.bbW * 0.5f, blob.bbH * 0.5f);
+        }
+    }
+    shader_.setUniform4fv(
+        "cvBlobs", reinterpret_cast<const float*>(cvBlobs.data()), kMaxCvBlobs);
+    shader_.setUniform1i("cvBlobCount", cvBlobCount);
+    shader_.setUniform1f("cvPadding", 0.03f);
     shader_.setUniform1f("opacity", settings_.opacity);
     shader_.setUniform1f("zInvert", settings_.zInvert ? 1.f : 0.f);
     shader_.setUniform1f("xyScale", settings_.xyScale);

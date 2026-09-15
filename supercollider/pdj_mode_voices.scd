@@ -21,7 +21,7 @@
 			var sig = voiceFunc.value(base, anchor, tension, activity, color, variant, evo);
 			var ceiling = evo.linexp(0, 1, 3500, 17000) * tension.linexp(0, 1, 0.8, 1.15);
 			sig = LeakDC.ar(LPF.ar(sig, ceiling.clip(1800, 18000)));
-			Out.ar(out, (sig * presence * life * master ! ~numSpeakers) * gains);
+			Out.ar(out, ~routeByGains.(sig * presence * life * master, gains));
 		}).add;
 	};
 
@@ -136,7 +136,7 @@
 			+ (SinOsc.ar(pitch * 1.006, 0, 0.24));
 		var edge  = BPF.ar(PinkNoise.ar, 950 + (weight * 850), 0.18)
 			* EnvGen.ar(Env.perc(0.001, 0.035)) * 0.10;
-		Out.ar(out, PanAz.ar(~numSpeakers, (body * env + edge) * amp, pos, 1, 0.5));
+		Out.ar(out, ~routeByPosition.((body * env + edge) * amp, pos, 0.5));
 	}).add;
 
 	~modeSynthNames = [

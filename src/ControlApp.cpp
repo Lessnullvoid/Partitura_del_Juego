@@ -1,10 +1,112 @@
 #include "ControlApp.h"
 #include "SettingsStore.h"
-#include <CoreGraphics/CoreGraphics.h>
 #include <cmath>
 #include <cstdlib>
 
 namespace {
+const ImVec4 kInk(0.94f, 0.94f, 0.94f, 1.f);
+const ImVec4 kMute(0.46f, 0.46f, 0.46f, 1.f);
+const ImVec4 kLive(0.86f, 0.16f, 0.16f, 1.f);
+const ImVec4 kErr(0.95f, 0.22f, 0.22f, 1.f);
+const ImVec4 kLiveFill(0.42f, 0.07f, 0.07f, 1.f);
+const ImVec4 kLiveHover(0.72f, 0.12f, 0.12f, 1.f);
+const ImVec4 kLiveCard(0.07f, 0.02f, 0.02f, 1.f);
+
+void applyMinimalBlackStyle() {
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 0.f;
+    style.ChildRounding = 0.f;
+    style.FrameRounding = 0.f;
+    style.GrabRounding = 0.f;
+    style.TabRounding = 0.f;
+    style.ScrollbarRounding = 0.f;
+    style.PopupRounding = 0.f;
+    style.WindowBorderSize = 0.f;
+    style.ChildBorderSize = 1.f;
+    style.FrameBorderSize = 0.f;
+    style.PopupBorderSize = 0.f;
+    style.WindowPadding = ImVec2(16.f, 12.f);
+    style.FramePadding = ImVec2(8.f, 4.f);
+    style.ItemSpacing = ImVec2(8.f, 6.f);
+    style.ItemInnerSpacing = ImVec2(6.f, 3.f);
+    style.IndentSpacing = 16.f;
+    style.ScrollbarSize = 8.f;
+    style.GrabMinSize = 8.f;
+    style.WindowTitleAlign = ImVec2(0.f, 0.5f);
+    style.Alpha = 1.f;
+
+    ImVec4* c = style.Colors;
+    const ImVec4 black(0.f, 0.f, 0.f, 1.f);
+    const ImVec4 panel(0.055f, 0.055f, 0.055f, 1.f);
+    const ImVec4 frame(0.10f, 0.10f, 0.10f, 1.f);
+    const ImVec4 hover(0.16f, 0.16f, 0.16f, 1.f);
+    const ImVec4 active(0.22f, 0.22f, 0.22f, 1.f);
+    const ImVec4 line(0.22f, 0.22f, 0.22f, 1.f);
+    const ImVec4 text(0.90f, 0.90f, 0.90f, 1.f);
+    const ImVec4 dim(0.42f, 0.42f, 0.42f, 1.f);
+
+    c[ImGuiCol_Text] = text;
+    c[ImGuiCol_TextDisabled] = dim;
+    c[ImGuiCol_WindowBg] = black;
+    c[ImGuiCol_ChildBg] = panel;
+    c[ImGuiCol_PopupBg] = black;
+    c[ImGuiCol_Border] = line;
+    c[ImGuiCol_BorderShadow] = ImVec4(0.f, 0.f, 0.f, 0.f);
+    c[ImGuiCol_FrameBg] = frame;
+    c[ImGuiCol_FrameBgHovered] = hover;
+    c[ImGuiCol_FrameBgActive] = kLiveFill;
+    c[ImGuiCol_TitleBg] = black;
+    c[ImGuiCol_TitleBgActive] = black;
+    c[ImGuiCol_TitleBgCollapsed] = black;
+    c[ImGuiCol_MenuBarBg] = black;
+    c[ImGuiCol_ScrollbarBg] = black;
+    c[ImGuiCol_ScrollbarGrab] = hover;
+    c[ImGuiCol_ScrollbarGrabHovered] = active;
+    c[ImGuiCol_ScrollbarGrabActive] = kLive;
+    c[ImGuiCol_CheckMark] = kLive;
+    c[ImGuiCol_SliderGrab] = ImVec4(0.72f, 0.72f, 0.72f, 1.f);
+    c[ImGuiCol_SliderGrabActive] = kLive;
+    c[ImGuiCol_Button] = frame;
+    c[ImGuiCol_ButtonHovered] = hover;
+    c[ImGuiCol_ButtonActive] = kLiveFill;
+    c[ImGuiCol_Header] = kLiveFill;
+    c[ImGuiCol_HeaderHovered] = kLiveHover;
+    c[ImGuiCol_HeaderActive] = kLive;
+    c[ImGuiCol_Separator] = line;
+    c[ImGuiCol_SeparatorHovered] = kLiveHover;
+    c[ImGuiCol_SeparatorActive] = kLive;
+    c[ImGuiCol_ResizeGrip] = frame;
+    c[ImGuiCol_ResizeGripHovered] = hover;
+    c[ImGuiCol_ResizeGripActive] = kLive;
+    c[ImGuiCol_Tab] = black;
+    c[ImGuiCol_TabHovered] = kLiveHover;
+    c[ImGuiCol_TabActive] = kLiveFill;
+    c[ImGuiCol_TabUnfocused] = black;
+    c[ImGuiCol_TabUnfocusedActive] = panel;
+    c[ImGuiCol_PlotLines] = text;
+    c[ImGuiCol_PlotLinesHovered] = kLive;
+    c[ImGuiCol_PlotHistogram] = kLive;
+    c[ImGuiCol_PlotHistogramHovered] = kErr;
+    c[ImGuiCol_TextSelectedBg] = ImVec4(0.86f, 0.16f, 0.16f, 0.40f);
+    c[ImGuiCol_DragDropTarget] = kLive;
+    c[ImGuiCol_NavHighlight] = kLive;
+    c[ImGuiCol_NavWindowingHighlight] = text;
+    c[ImGuiCol_NavWindowingDimBg] = ImVec4(0.f, 0.f, 0.f, 0.55f);
+    c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.f, 0.f, 0.f, 0.65f);
+}
+
+bool liveButton(const char* label, bool on, const ImVec2& size = ImVec2(0.f, 0.f)) {
+    if (on) {
+        ImGui::PushStyleColor(ImGuiCol_Button, kLiveFill);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kLiveHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, kLive);
+        ImGui::PushStyleColor(ImGuiCol_Text, kInk);
+    }
+    const bool clicked = ImGui::Button(label, size);
+    if (on) ImGui::PopStyleColor(4);
+    return clicked;
+}
+
 void sectionTitle(const char* title) {
     ImGui::Spacing();
     ImGui::TextDisabled("%s", title);
@@ -30,41 +132,6 @@ bool compactSliderInt(const char* label, const char* id, int* value,
     ImGui::SameLine(startX + 108.f);
     ImGui::SetNextItemWidth(std::min(180.f, ImGui::GetContentRegionAvail().x));
     return ImGui::SliderInt(id, value, minValue, maxValue);
-}
-
-constexpr std::size_t kIcuixianInputWidth = 1920;
-constexpr std::size_t kIcuixianInputHeight = 1080;
-constexpr double kIcuixianRefreshHz = 60.0;
-
-CGDisplayModeRef copyIcuixianInputMode(CGDirectDisplayID displayID) {
-    CFArrayRef modes = CGDisplayCopyAllDisplayModes(displayID, nullptr);
-    if (!modes) return nullptr;
-
-    CGDisplayModeRef best = nullptr;
-    double bestRefreshError = 1000.0;
-    const CFIndex count = CFArrayGetCount(modes);
-    for (CFIndex i = 0; i < count; ++i) {
-        auto mode = static_cast<CGDisplayModeRef>(
-            const_cast<void*>(CFArrayGetValueAtIndex(modes, i)));
-        if (CGDisplayModeGetPixelWidth(mode) != kIcuixianInputWidth ||
-            CGDisplayModeGetPixelHeight(mode) != kIcuixianInputHeight ||
-            CGDisplayModeGetWidth(mode) != kIcuixianInputWidth ||
-            CGDisplayModeGetHeight(mode) != kIcuixianInputHeight) {
-            continue;
-        }
-
-        const double refresh = CGDisplayModeGetRefreshRate(mode);
-        const double refreshError =
-            refresh > 0.0 ? std::abs(refresh - kIcuixianRefreshHz) : 0.5;
-        if (refreshError <= 1.0 && refreshError < bestRefreshError) {
-            best = mode;
-            bestRefreshError = refreshError;
-        }
-    }
-
-    if (best) CFRetain(best);
-    CFRelease(modes);
-    return best;
 }
 }
 
@@ -93,11 +160,15 @@ void ControlApp::buildWallSummaryFromSettings(const ofJson& cfg) {
         const std::string layout = w.value("layout", "4x1");
         const bool landscape = (layout == "2x2");
         int rotDeg = landscape ? 0 : 90;
+        std::string connector = "unknown";
         const char* wallKey = (idx == 0) ? "wallA" : "wallB";
-        if (vwc.contains(wallKey) && vwc[wallKey].is_object())
+        if (vwc.contains(wallKey) && vwc[wallKey].is_object()) {
             rotDeg = vwc[wallKey].value("rotationDegrees", rotDeg);
+            connector = vwc[wallKey].value("connector", connector);
+        }
         const int chStart = static_cast<int>(idx) * 4;
         return (idx == 0 ? "WALL A  " : "WALL B  ") +
+               connector + "  |  " +
                layout + (landscape ? " landscape" : " portrait") +
                "  |  ICUIXIAN rotation " + std::to_string(rotDeg) + " deg" +
                "  |  channels " + std::to_string(chStart) + "-" +
@@ -113,7 +184,7 @@ void ControlApp::buildWallSummaryFromSettings(const ofJson& cfg) {
 }
 
 void ControlApp::setup() {
-    ofSetBackgroundColor(15, 15, 15);
+    ofSetBackgroundColor(0, 0, 0);
     gui_.setup();
 
     ImGuiIO& io = ImGui::GetIO();
@@ -122,7 +193,7 @@ void ControlApp::setup() {
     io.IniFilename = nullptr;
     io.Fonts->Clear();
     io.FontDefault =
-        io.Fonts->AddFontFromFileTTF("/System/Library/Fonts/SFNS.ttf", 18.f);
+        io.Fonts->AddFontFromFileTTF("/System/Library/Fonts/SFNS.ttf", 16.f);
     if (!io.FontDefault) io.FontDefault = io.Fonts->AddFontDefault();
 
     unsigned char* fontPixels = nullptr;
@@ -142,17 +213,8 @@ void ControlApp::setup() {
         static_cast<intptr_t>(fontTexture_));
     glBindTexture(GL_TEXTURE_2D, previousTexture);
 
-    ImGuiStyle& style = ImGui::GetStyle();
     io.FontGlobalScale = 1.f;
-    style.WindowRounding = 0.f;
-    style.ChildRounding = 6.f;
-    style.FrameRounding = 4.f;
-    style.TabRounding = 4.f;
-    style.WindowPadding = ImVec2(12.f, 10.f);
-    style.FramePadding = ImVec2(7.f, 5.f);
-    style.ItemSpacing = ImVec2(8.f, 6.f);
-    style.ItemInnerSpacing = ImVec2(4.f, 3.f);
-    style.ScrollbarSize = 10.f;
+    applyMinimalBlackStyle();
 
     strncpy(oscHostBuf_, osc_->getHost().c_str(), sizeof(oscHostBuf_) - 1);
     oscPort_ = osc_->getPort();
@@ -160,7 +222,13 @@ void ControlApp::setup() {
     const ofJson cfg = SettingsStore::load();
     dualWindowConfigured_ =
         cfg.is_object() && cfg.value("outputMode", std::string()) == "dualWindow8";
-    if (cfg.is_object()) buildWallSummaryFromSettings(cfg);
+    if (cfg.is_object() && cfg.contains("audio") && cfg["audio"].is_object())
+        masterVolume_ = ofClamp(
+            cfg["audio"].value("masterVolume", masterVolume_), 0.f, 1.f);
+    if (cfg.is_object()) {
+        buildWallSummaryFromSettings(cfg);
+        syncIdentifyRotation(cfg);
+    }
     oscReceiverReady_ = oscReceiver_.setup(oscListenPort_);
     if (oscReceiverReady_)
         ofLogNotice("OSCReceiver") << "Listening on port " << oscListenPort_;
@@ -172,7 +240,13 @@ void ControlApp::setup() {
 }
 
 void ControlApp::update() {
+    if (identify_) identify_->tick(ofGetElapsedTimef());
     pollVpcOsc();
+    const float now = ofGetElapsedTimef();
+    if (osc_ && now - lastVolumeHeartbeat_ >= 1.f) {
+        osc_->sendMasterVolume(masterVolume_, oscListenPort_);
+        lastVolumeHeartbeat_ = now;
+    }
     if (!performance_) return;
     performance_->update(channels_, composer_);
     if (performance_->hasResults() &&
@@ -187,6 +261,13 @@ void ControlApp::pollVpcOsc() {
     while (oscReceiver_.hasWaitingMessages()) {
         ofxOscMessage message;
         oscReceiver_.getNextMessage(message);
+        if (message.getAddress() == "/pdj/audio/master/ack" &&
+            message.getNumArgs() > 0) {
+            acknowledgedVolume_ =
+                ofClamp(message.getArgAsFloat(0), 0.f, 1.f);
+            lastVolumeAckAt_ = ofGetElapsedTimef();
+            continue;
+        }
         const auto parts = ofSplitString(message.getAddress(), "/", true, true);
         if (parts.size() == 3 && parts[0] == "pdjv" &&
             parts[1] == "program" && composer_) {
@@ -265,6 +346,7 @@ void ControlApp::pollVpcOsc() {
 }
 
 void ControlApp::draw() {
+    ofClear(0, 0, 0);
     if (!showUI_) return;
     gui_.begin();
 
@@ -373,111 +455,63 @@ bool ControlApp::saveOutputMode(const std::string& mode) {
     return true;
 }
 
-bool ControlApp::detectAndSaveDualOutputs() {
-    struct DetectedDisplay {
-        CGDirectDisplayID id = kCGNullDirectDisplay;
-        CGRect bounds = CGRectZero;
-        std::size_t physicalArea = 0;
-        bool external = false;
-        bool is4K = false;
-    };
+void ControlApp::syncIdentifyRotation(const ofJson& cfg) {
+    if (!identify_) return;
+    const ofJson empty;
+    const ofJson& vwc = cfg.contains("videoWallController") &&
+                        cfg["videoWallController"].is_object()
+                        ? cfg["videoWallController"] : empty;
+    int rotA = 90;
+    int rotB = 0;
+    if (vwc.contains("wallA") && vwc["wallA"].is_object())
+        rotA = vwc["wallA"].value("rotationDegrees", rotA);
+    if (vwc.contains("wallB") && vwc["wallB"].is_object())
+        rotB = vwc["wallB"].value("rotationDegrees", rotB);
+    identify_->wallARotationDegrees.store(rotA);
+    identify_->wallBRotationDegrees.store(rotB);
+}
 
-    uint32_t displayCount = 0;
-    if (CGGetActiveDisplayList(0, nullptr, &displayCount) != kCGErrorSuccess ||
-        displayCount < 2) {
-        outputModeError_ = "Two active displays were not detected";
-        return false;
+void ControlApp::toggleIdentify(WallIdentifyState::Mode mode) {
+    if (!identify_) return;
+    const float now = ofGetElapsedTimef();
+    if (identify_->current() == mode)
+        identify_->setMode(WallIdentifyState::Mode::Off, now);
+    else
+        identify_->setMode(mode, now);
+}
+
+void ControlApp::toggleLandscapeVideoSafety() {
+    if (!safety_) return;
+    const bool hide = !safety_->hideLandscapeVideo.load();
+    safety_->hideLandscapeVideo.store(hide);
+    for (Channel* ch : channels_) {
+        if (!ch || !safety_->isLandscapeChannel(ch->getIdx())) continue;
+        if (hide) {
+            ch->pause();
+        } else if (!(composer_ && composer_->params().enabled)) {
+            ch->play();
+        }
     }
+    ofLogNotice("ControlApp")
+        << (hide ? "Landscape-wall video hidden"
+                 : "Landscape-wall video restored");
+}
 
-    std::vector<CGDirectDisplayID> ids(displayCount);
-    if (CGGetActiveDisplayList(displayCount, ids.data(), &displayCount) !=
-        kCGErrorSuccess) {
-        outputModeError_ = "macOS display detection failed";
-        return false;
-    }
-
-    std::vector<DetectedDisplay> external;
-    for (uint32_t i = 0; i < displayCount; ++i) {
-        const CGDirectDisplayID id = ids[i];
-        if (CGDisplayMirrorsDisplay(id) != kCGNullDirectDisplay) continue;
-
-        const std::size_t physicalW = CGDisplayPixelsWide(id);
-        const std::size_t physicalH = CGDisplayPixelsHigh(id);
-        DetectedDisplay display;
-        display.id = id;
-        display.bounds = CGDisplayBounds(id);
-        display.physicalArea = physicalW * physicalH;
-        display.external = CGDisplayIsBuiltin(id) == 0;
-        display.is4K = physicalW >= 3840;
-        if (display.external) external.push_back(display);
-    }
-
-    std::vector<DetectedDisplay> candidates = external;
-    if (candidates.size() < 2) {
+bool ControlApp::configureWalls(DisplayProbe::WallPreset preset) {
+    DisplayProbe::WallPair pair = DisplayProbe::pickConfigurePair();
+    if (!pair.valid) {
         outputModeError_ =
             "ICUIXIAN setup requires two independent external displays";
         return false;
     }
 
-    std::sort(candidates.begin(), candidates.end(),
-              [](const DetectedDisplay& a, const DetectedDisplay& b) {
-                  if (a.is4K != b.is4K) return a.is4K > b.is4K;
-                  return a.physicalArea > b.physicalArea;
-              });
-    candidates.resize(2);
-
-    std::vector<CGDisplayModeRef> inputModes;
-    inputModes.reserve(candidates.size());
-    for (const auto& display : candidates) {
-        const CGDisplayModeRef mode = copyIcuixianInputMode(display.id);
-        if (!mode) {
-            for (const auto retainedMode : inputModes) CFRelease(retainedMode);
-            outputModeError_ =
-                "ICUIXIAN 1920x1080 @ 60 Hz mode is unavailable on an input";
-            return false;
-        }
-        inputModes.push_back(mode);
-    }
-
-    CGDisplayConfigRef displayConfig = nullptr;
-    CGError modeResult = CGBeginDisplayConfiguration(&displayConfig);
-    for (std::size_t i = 0;
-         modeResult == kCGErrorSuccess && i < candidates.size(); ++i) {
-        modeResult = CGConfigureDisplayWithDisplayMode(
-            displayConfig, candidates[i].id, inputModes[i], nullptr);
-    }
-    if (modeResult == kCGErrorSuccess) {
-        modeResult = CGCompleteDisplayConfiguration(
-            displayConfig, kCGConfigurePermanently);
-    } else if (displayConfig) {
-        CGCancelDisplayConfiguration(displayConfig);
-    }
-    for (const auto mode : inputModes) CFRelease(mode);
-
-    if (modeResult != kCGErrorSuccess) {
-        outputModeError_ =
-            "macOS could not switch both ICUIXIAN inputs to 1080p60";
+    std::string modeError;
+    if (!DisplayProbe::switchPairToIcuixianMode(pair, &modeError)) {
+        outputModeError_ = modeError.empty()
+            ? "macOS could not switch both ICUIXIAN inputs to 1080p60"
+            : modeError;
         return false;
     }
-
-    for (auto& display : candidates) {
-        display.bounds = CGDisplayBounds(display.id);
-        if (static_cast<int>(display.bounds.size.width) !=
-                static_cast<int>(kIcuixianInputWidth) ||
-            static_cast<int>(display.bounds.size.height) !=
-                static_cast<int>(kIcuixianInputHeight)) {
-            outputModeError_ =
-                "ICUIXIAN input is not exposed as a 1920x1080 desktop";
-            return false;
-        }
-    }
-
-    std::sort(candidates.begin(), candidates.end(),
-              [](const DetectedDisplay& a, const DetectedDisplay& b) {
-                  if (a.bounds.origin.x != b.bounds.origin.x)
-                      return a.bounds.origin.x < b.bounds.origin.x;
-                  return a.bounds.origin.y < b.bounds.origin.y;
-              });
 
     std::string settingsError;
     ofJson cfg = SettingsStore::load(&settingsError);
@@ -487,162 +521,30 @@ bool ControlApp::detectAndSaveDualOutputs() {
         return false;
     }
 
-    ofJson windows = ofJson::array();
-    for (const auto& display : candidates) {
-        windows.push_back({
-            {"x", static_cast<int>(display.bounds.origin.x)},
-            {"y", static_cast<int>(display.bounds.origin.y)},
-            {"width", static_cast<int>(display.bounds.size.width)},
-            {"height", static_cast<int>(display.bounds.size.height)},
-            {"layout", "4x1"}
-        });
-    }
-    cfg["outputMode"] = "dualWindow8";
-    cfg["presentationWindows"] = windows;
-    cfg["videoWallController"] = {
-        {"brand", "ICUIXIAN"},
-        {"model", "0104-XZ"},
-        {"asin", "B0DM98NVSH"},
-        {"controllers", 2},
-        {"inputWidth", kIcuixianInputWidth},
-        {"inputHeight", kIcuixianInputHeight},
-        {"refreshHz", kIcuixianRefreshHz},
-        {"wallA", {{"layout", "4x1"}, {"layoutPerController", "4x1"}, {"rotationDegrees", 90}, {"panelOrientation", "portrait"}, {"panels", 4}}},
-        {"wallB", {{"layout", "4x1"}, {"layoutPerController", "4x1"}, {"rotationDegrees", 90}, {"panelOrientation", "portrait"}, {"panels", 4}}}
-    };
-    // Ambos muros son verticales aquí (botón 4V+4V). Para mixto vertical+horizontal
-    // usar "Configure Mixed Wall (4V + 2x2H)", que pone wallB rotationDegrees=0.
-
-    if (!SettingsStore::save(cfg, &settingsError)) {
+    if (!DisplayProbe::savePair(cfg, pair, preset, &settingsError)) {
         outputModeError_ = settingsError.empty()
             ? "Could not write settings.json" : settingsError;
         return false;
     }
 
-    const auto& a = candidates[0].bounds;
-    const auto& b = candidates[1].bounds;
-    detectedOutputSummary_ =
-        "ICUIXIAN A " +
-        ofToString(static_cast<int>(a.size.width)) + "x" +
-        ofToString(static_cast<int>(a.size.height)) + " @ " +
-        ofToString(static_cast<int>(a.origin.x)) + "," +
-        ofToString(static_cast<int>(a.origin.y)) +
-        " [4x1 portrait rot 90] | B " +
-        ofToString(static_cast<int>(b.size.width)) + "x" +
-        ofToString(static_cast<int>(b.size.height)) + " @ " +
-        ofToString(static_cast<int>(b.origin.x)) + "," +
-        ofToString(static_cast<int>(b.origin.y)) + " [4x1 portrait rot 90]";
+    detectedOutputSummary_ = DisplayProbe::describePair(pair, preset);
     buildWallSummaryFromSettings(cfg);
+    syncIdentifyRotation(cfg);
     outputModeError_.clear();
     dualWindowConfigured_ = true;
     outputRestartRequired_ = true;
     return true;
 }
 
+bool ControlApp::detectAndSaveDualOutputs() {
+    return configureWalls(DisplayProbe::WallPreset::DualPortrait);
+}
+
 bool ControlApp::configureMixedWall() {
-    // Ejecuta la misma detección de pantallas que detectAndSaveDualOutputs() pero
-    // guarda Wall A como 4x1 vertical (4 franjas, ICUIXIAN rotado 90 deg) y
-    // Wall B como 2x2 horizontal (retícula 2x2, rotación ICUIXIAN 0 deg).
-    struct DetectedDisplay {
-        CGDirectDisplayID id = kCGNullDirectDisplay;
-        CGRect bounds = CGRectZero;
-        std::size_t physicalArea = 0;
-        bool external = false;
-        bool is4K = false;
-    };
+    return configureWalls(DisplayProbe::WallPreset::Mixed);
+}
 
-    uint32_t displayCount = 0;
-    if (CGGetActiveDisplayList(0, nullptr, &displayCount) != kCGErrorSuccess ||
-        displayCount < 2) {
-        outputModeError_ = "Two active displays were not detected";
-        return false;
-    }
-
-    std::vector<CGDirectDisplayID> ids(displayCount);
-    if (CGGetActiveDisplayList(displayCount, ids.data(), &displayCount) !=
-        kCGErrorSuccess) {
-        outputModeError_ = "macOS display detection failed";
-        return false;
-    }
-
-    std::vector<DetectedDisplay> external;
-    for (uint32_t i = 0; i < displayCount; ++i) {
-        const CGDirectDisplayID id = ids[i];
-        if (CGDisplayMirrorsDisplay(id) != kCGNullDirectDisplay) continue;
-        const std::size_t physicalW = CGDisplayPixelsWide(id);
-        const std::size_t physicalH = CGDisplayPixelsHigh(id);
-        DetectedDisplay display;
-        display.id = id;
-        display.bounds = CGDisplayBounds(id);
-        display.physicalArea = physicalW * physicalH;
-        display.external = CGDisplayIsBuiltin(id) == 0;
-        display.is4K = physicalW >= 3840;
-        if (display.external) external.push_back(display);
-    }
-
-    if (external.size() < 2) {
-        outputModeError_ = "Mixed wall setup requires two independent external displays";
-        return false;
-    }
-
-    std::sort(external.begin(), external.end(),
-              [](const DetectedDisplay& a, const DetectedDisplay& b) {
-                  if (a.is4K != b.is4K) return a.is4K > b.is4K;
-                  return a.physicalArea > b.physicalArea;
-              });
-    external.resize(2);
-
-    std::vector<CGDisplayModeRef> inputModes;
-    inputModes.reserve(external.size());
-    for (const auto& display : external) {
-        const CGDisplayModeRef mode = copyIcuixianInputMode(display.id);
-        if (!mode) {
-            for (const auto retainedMode : inputModes) CFRelease(retainedMode);
-            outputModeError_ = "1920x1080 @ 60 Hz mode unavailable on one of the displays";
-            return false;
-        }
-        inputModes.push_back(mode);
-    }
-
-    CGDisplayConfigRef displayConfig = nullptr;
-    CGError modeResult = CGBeginDisplayConfiguration(&displayConfig);
-    for (std::size_t i = 0;
-         modeResult == kCGErrorSuccess && i < external.size(); ++i) {
-        modeResult = CGConfigureDisplayWithDisplayMode(
-            displayConfig, external[i].id, inputModes[i], nullptr);
-    }
-    if (modeResult == kCGErrorSuccess) {
-        modeResult = CGCompleteDisplayConfiguration(
-            displayConfig, kCGConfigurePermanently);
-    } else if (displayConfig) {
-        CGCancelDisplayConfiguration(displayConfig);
-    }
-    for (const auto mode : inputModes) CFRelease(mode);
-
-    if (modeResult != kCGErrorSuccess) {
-        outputModeError_ = "macOS could not switch both ICUIXIAN inputs to 1080p60";
-        return false;
-    }
-
-    for (auto& display : external) {
-        display.bounds = CGDisplayBounds(display.id);
-        if (static_cast<int>(display.bounds.size.width) !=
-                static_cast<int>(kIcuixianInputWidth) ||
-            static_cast<int>(display.bounds.size.height) !=
-                static_cast<int>(kIcuixianInputHeight)) {
-            outputModeError_ = "Display is not exposed as a 1920x1080 desktop";
-            return false;
-        }
-    }
-
-    // Ordenar de izquierda a derecha para que Window A sea la salida más a la izquierda (Wall A = vertical).
-    std::sort(external.begin(), external.end(),
-              [](const DetectedDisplay& a, const DetectedDisplay& b) {
-                  if (a.bounds.origin.x != b.bounds.origin.x)
-                      return a.bounds.origin.x < b.bounds.origin.x;
-                  return a.bounds.origin.y < b.bounds.origin.y;
-              });
-
+bool ControlApp::swapWalls() {
     std::string settingsError;
     ofJson cfg = SettingsStore::load(&settingsError);
     if (!cfg.is_object()) {
@@ -650,38 +552,25 @@ bool ControlApp::configureMixedWall() {
             ? "settings.json is missing or invalid" : settingsError;
         return false;
     }
+    if (!cfg.contains("presentationWindows") ||
+        !cfg["presentationWindows"].is_array() ||
+        cfg["presentationWindows"].size() < 2) {
+        outputModeError_ = "Two presentation windows are not configured";
+        return false;
+    }
 
-    // Wall A: pantalla más a la izquierda, franjas 4x1 verticales.
-    // Wall B: pantalla más a la derecha, retícula 2x2 horizontal.
-    ofJson windows = ofJson::array();
-    windows.push_back({
-        {"x",      static_cast<int>(external[0].bounds.origin.x)},
-        {"y",      static_cast<int>(external[0].bounds.origin.y)},
-        {"width",  static_cast<int>(external[0].bounds.size.width)},
-        {"height", static_cast<int>(external[0].bounds.size.height)},
-        {"layout", "4x1"}
-    });
-    windows.push_back({
-        {"x",      static_cast<int>(external[1].bounds.origin.x)},
-        {"y",      static_cast<int>(external[1].bounds.origin.y)},
-        {"width",  static_cast<int>(external[1].bounds.size.width)},
-        {"height", static_cast<int>(external[1].bounds.size.height)},
-        {"layout", "2x2"}
-    });
+    ofJson a = cfg["presentationWindows"][0];
+    cfg["presentationWindows"][0] = cfg["presentationWindows"][1];
+    cfg["presentationWindows"][1] = a;
 
-    cfg["outputMode"] = "dualWindow8";
-    cfg["presentationWindows"] = windows;
-    cfg["videoWallController"] = {
-        {"brand", "ICUIXIAN"},
-        {"model", "0104-XZ"},
-        {"asin", "B0DM98NVSH"},
-        {"controllers", 2},
-        {"inputWidth", kIcuixianInputWidth},
-        {"inputHeight", kIcuixianInputHeight},
-        {"refreshHz", kIcuixianRefreshHz},
-        {"wallA", {{"layout", "4x1"}, {"layoutPerController", "4x1"}, {"rotationDegrees", 90}, {"panelOrientation", "portrait"}, {"panels", 4}}},
-        {"wallB", {{"layout", "2x2"}, {"layoutPerController", "2x2"}, {"rotationDegrees", 0},  {"panelOrientation", "landscape"}, {"panels", 4}}}
-    };
+    if (cfg.contains("videoWallController") &&
+        cfg["videoWallController"].is_object()) {
+        ofJson& vwc = cfg["videoWallController"];
+        ofJson wallA = vwc.value("wallA", ofJson::object());
+        ofJson wallB = vwc.value("wallB", ofJson::object());
+        vwc["wallA"] = wallB;
+        vwc["wallB"] = wallA;
+    }
 
     if (!SettingsStore::save(cfg, &settingsError)) {
         outputModeError_ = settingsError.empty()
@@ -689,20 +578,9 @@ bool ControlApp::configureMixedWall() {
         return false;
     }
 
-    const auto& a = external[0].bounds;
-    const auto& b = external[1].bounds;
-    detectedOutputSummary_ =
-        "Mixed wall: A " +
-        ofToString(static_cast<int>(a.size.width)) + "x" +
-        ofToString(static_cast<int>(a.size.height)) + " @ " +
-        ofToString(static_cast<int>(a.origin.x)) + "," +
-        ofToString(static_cast<int>(a.origin.y)) +
-        " [4x1 portrait rot 90] | B " +
-        ofToString(static_cast<int>(b.size.width)) + "x" +
-        ofToString(static_cast<int>(b.size.height)) + " @ " +
-        ofToString(static_cast<int>(b.origin.x)) + "," +
-        ofToString(static_cast<int>(b.origin.y)) + " [2x2 landscape rot 0]";
     buildWallSummaryFromSettings(cfg);
+    syncIdentifyRotation(cfg);
+    detectedOutputSummary_ = "Wall A/B swapped; restart required";
     outputModeError_.clear();
     dualWindowConfigured_ = true;
     outputRestartRequired_ = true;
@@ -710,13 +588,13 @@ bool ControlApp::configureMixedWall() {
 }
 
 void ControlApp::drawGlobalPanel() {
-    // Altura: base 92 + 20 por línea de resumen de muro cuando existe.
+    // Altura: base + muro summaries + identify/swap row.
     const float wallLines = (!wallASummary_.empty() ? 1.f : 0.f) +
                             (!wallBSummary_.empty() ? 1.f : 0.f);
-    const float globalH = 92.f + wallLines * 22.f;
+    const float globalH = 168.f + wallLines * 22.f;
     ImGui::BeginChild("GlobalBar", ImVec2(0.f, globalH), true,
                       ImGuiWindowFlags_NoScrollbar);
-    ImGui::Text("PDJ CONTROL");
+    ImGui::TextColored(kInk, "PDJ");
     ImGui::SameLine(120.f);
     ImGui::TextDisabled("OSC");
     ImGui::SameLine();
@@ -729,15 +607,17 @@ void ControlApp::drawGlobalPanel() {
     if (ImGui::Button("Apply OSC")) {
         osc_->setHost(oscHostBuf_);
         osc_->setPort(oscPort_);
+        lastVolumeAckAt_ = -1.f;
+        osc_->sendMasterVolume(masterVolume_, oscListenPort_);
     }
     ImGui::SameLine();
     ImGui::TextDisabled("|  CLIPS");
     ImGui::SameLine();
-    ImGui::Text("%d available", pool_->totalClips());
+    ImGui::Text("Portrait: %d  Horizontal: %d",
+                pool_->totalClips(), pool_->totalHorizontalClips());
     ImGui::SameLine();
     if (dualWindowConfigured_) {
-        ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.55f, 1.f),
-                           "Dual output configured");
+        ImGui::TextColored(kLive, "Dual output configured");
     } else if (ImGui::Button("Enable dual output")) {
         if (saveOutputMode("dualWindow8")) {
             dualWindowConfigured_ = true;
@@ -750,24 +630,86 @@ void ControlApp::drawGlobalPanel() {
     ImGui::SameLine();
     if (ImGui::Button("Configure Mixed Wall (4V + 2x2H)"))
         configureMixedWall();
+    ImGui::SameLine();
+    if (ImGui::Button("Swap A/B"))
+        swapWalls();
     if (outputRestartRequired_) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.f, 0.68f, 0.25f, 1.f),
-                           "Restart required");
+        ImGui::TextColored(kLive, "Restart required");
     } else if (!outputModeError_.empty()) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.f, 0.35f, 0.35f, 1.f),
-                           "%s", outputModeError_.c_str());
+        ImGui::TextColored(kErr, "%s", outputModeError_.c_str());
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - 108.f);
     ImGui::TextDisabled("U: hide UI");
+
+    ImGui::TextDisabled("AUDIO");
+    ImGui::SameLine(120.f);
+    ImGui::SetNextItemWidth(300.f);
+    const bool volumeChanged =
+        ImGui::SliderFloat("##MasterVolume", &masterVolume_, 0.f, 1.f, "");
+    const bool volumeEditFinished = ImGui::IsItemDeactivatedAfterEdit();
+    ImGui::SameLine();
+    ImGui::Text("Master volume %.0f%%", masterVolume_ * 100.f);
+    if (volumeChanged && osc_)
+        osc_->sendMasterVolume(masterVolume_, oscListenPort_);
+    ImGui::SameLine();
+    const float ackAge = lastVolumeAckAt_ < 0.f
+        ? -1.f : ofGetElapsedTimef() - lastVolumeAckAt_;
+    if (ackAge >= 0.f && ackAge < 2.5f) {
+        ImGui::TextColored(
+            kLive,
+            "SC confirmed %.0f%%", acknowledgedVolume_ * 100.f);
+    } else if (ofGetElapsedTimef() > 3.f) {
+        ImGui::TextColored(
+            kErr,
+            "No response from SuperCollider on UDP %d", oscPort_);
+    } else {
+        ImGui::TextDisabled("Waiting for SuperCollider...");
+    }
+    if (volumeEditFinished) {
+        ofJson cfg = SettingsStore::load();
+        if (!cfg.contains("audio") || !cfg["audio"].is_object())
+            cfg["audio"] = ofJson::object();
+        cfg["audio"]["masterVolume"] = masterVolume_;
+        std::string error;
+        if (!SettingsStore::save(cfg, &error))
+            ofLogWarning("ControlApp") << "Could not save master volume: " << error;
+    }
+
     // Líneas de identidad por muro — siempre visibles para que el operador confirme el enrutado.
     if (!wallASummary_.empty())
-        ImGui::TextColored(ImVec4(0.35f, 0.90f, 0.55f, 1.f),
-                           "%s", wallASummary_.c_str());
+        ImGui::TextColored(kInk, "%s", wallASummary_.c_str());
     if (!wallBSummary_.empty())
-        ImGui::TextColored(ImVec4(0.40f, 0.65f, 1.00f, 1.f),
-                           "%s", wallBSummary_.c_str());
+        ImGui::TextColored(kMute, "%s", wallBSummary_.c_str());
+
+    const WallIdentifyState::Mode identifyMode =
+        identify_ ? identify_->current() : WallIdentifyState::Mode::Off;
+    if (liveButton(identifyMode == WallIdentifyState::Mode::WallA
+                       ? "Identify A (on)" : "Identify A",
+                   identifyMode == WallIdentifyState::Mode::WallA))
+        toggleIdentify(WallIdentifyState::Mode::WallA);
+    ImGui::SameLine();
+    if (liveButton(identifyMode == WallIdentifyState::Mode::WallB
+                       ? "Identify B (on)" : "Identify B",
+                   identifyMode == WallIdentifyState::Mode::WallB))
+        toggleIdentify(WallIdentifyState::Mode::WallB);
+    ImGui::SameLine();
+    if (liveButton(identifyMode == WallIdentifyState::Mode::Both
+                       ? "Identify both (on)" : "Identify both",
+                   identifyMode == WallIdentifyState::Mode::Both))
+        toggleIdentify(WallIdentifyState::Mode::Both);
+    ImGui::SameLine();
+    ImGui::TextDisabled("slice cards on the walls, auto-off 30s");
+    ImGui::SameLine();
+    const bool hideHVideo = safety_ && safety_->active();
+    if (liveButton(hideHVideo ? "H-wall video OFF" : "Hide H-wall video",
+                   hideHVideo))
+        toggleLandscapeVideoSafety();
+    if (hideHVideo) {
+        ImGui::SameLine();
+        ImGui::TextColored(kLive, "landscape wall is black / generators only");
+    }
     ImGui::EndChild();
 }
 
@@ -795,13 +737,33 @@ void ControlApp::drawOverview() {
         if ((i % columnsPerRow) != 0) ImGui::SameLine();
 
         ImGui::PushID(i);
+        const bool playing = ch->isPlaying();
+        if (playing) {
+            ImGui::PushStyleColor(ImGuiCol_Border, kLive);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, kLiveCard);
+        }
         ImGui::BeginChild("OverviewCard", ImVec2(cardWidth, cardHeight), true);
 
-        ImGui::Text("CHANNEL %d", i);
+        // Wall label: channels 0-3 = Wall A, 4-7 = Wall B.
+        const bool isWallB = (i >= 4);
+        ImGui::TextColored(isWallB ? kMute : kInk,
+                           "%s", isWallB ? "B" : "A");
         ImGui::SameLine();
-        ImGui::TextColored(ch->isPlaying() ? ImVec4(0.35f, 0.85f, 0.55f, 1.f)
-                                           : ImVec4(0.75f, 0.75f, 0.75f, 1.f),
-                           "%s", ch->isPlaying() ? "PLAYING" : "STOPPED");
+        ImGui::Text("CH%d", i);
+        ImGui::SameLine();
+        if (ch->landscapeVideoHidden()) {
+            ImGui::TextColored(kLive, "H-VIDEO OFF");
+        } else {
+            ImGui::TextColored(playing ? kLive : kMute,
+                               "%s", playing ? "PLAYING" : "STOPPED");
+        }
+        // Canvas dimensions — Wall B should be landscape (960x540).
+        // Show red only if Wall B has portrait dimensions (2x2 layout not applied).
+        ImGui::SameLine();
+        const bool portraitCanvas = ch->canvasH() > ch->canvasW();
+        const bool wrongLayout    = isWallB && portraitCanvas;
+        ImGui::TextColored(wrongLayout ? kErr : kMute,
+                           "%dx%d", ch->canvasW(), ch->canvasH());
         ImGui::Separator();
 
         const std::string clipName =
@@ -811,8 +773,8 @@ void ControlApp::drawOverview() {
 
         if (ImGui::Button("Next")) ch->loadNextClip();
         ImGui::SameLine();
-        if (ImGui::Button(ch->isPlaying() ? "Pause" : "Play"))
-            ch->isPlaying() ? ch->pause() : ch->play();
+        if (liveButton(playing ? "Pause" : "Play", playing))
+            playing ? ch->pause() : ch->play();
         ImGui::SameLine();
         if (ImGui::Button("Stop")) ch->stop();
 
@@ -824,13 +786,15 @@ void ControlApp::drawOverview() {
         sectionTitle("SCORE");
         const int currentMode = static_cast<int>(ch->getScore().currentMode());
         ImGui::Text("Active mode");
-        ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.f, 1.f), "%s",
+        ImGui::TextColored(kInk, "%s",
             kModeNames[std::min(currentMode, static_cast<int>(ScoreMode::Flash) + 1)]);
 
         sectionTitle("EVENTS");
         const CVData& data = ch->getCVPipeline().getData();
-        ImGui::Text("Collision: %s", data.events.collision ? "YES" : "No");
-        ImGui::Text("Ball: %s", data.events.ballDetected ? "YES" : "No");
+        ImGui::TextColored(data.events.collision ? kLive : kMute,
+                           "Collision: %s", data.events.collision ? "YES" : "No");
+        ImGui::TextColored(data.events.ballDetected ? kLive : kMute,
+                           "Ball: %s", data.events.ballDetected ? "YES" : "No");
         ImGui::Text("Crowd density: %.2f", data.events.crowdDensity);
         ImGui::Text("Leg distance: %.2f", data.events.legDistance);
 
@@ -843,6 +807,7 @@ void ControlApp::drawOverview() {
         ImGui::Text("Update: %.2f ms", ch->getUpdateMilliseconds());
 
         ImGui::EndChild();
+        if (playing) ImGui::PopStyleColor(2);
         ImGui::PopID();
     }
 }
@@ -873,8 +838,13 @@ void ControlApp::drawDirectorPanel() {
     float spd = dir_->getSpeedMultiplier();
     ImGui::Text("GLOBAL DIRECTOR");
     ImGui::SameLine(145.f);
-    ImGui::Text("Temporal: %s  x%.2f   |   Clear: %s  a%.0f",
-                tName, spd, cName, dir_->getClearAlpha());
+    ImGui::TextColored(dir_->temporalPhase() == TemporalPhase::Idle ? kMute : kLive,
+                       "Temporal: %s  x%.2f", tName, spd);
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    ImGui::TextColored(dir_->clearPhase() == ClearPhase::Idle ? kMute : kLive,
+                       "Clear: %s  a%.0f", cName, dir_->getClearAlpha());
 
     ImGui::Separator();
     const float columnWidth = ImGui::GetContentRegionAvail().x / 3.f;
@@ -935,8 +905,7 @@ void ControlApp::drawVideoDirectorPanel() {
     ImGui::BeginChild("VideoDirectorPanel", ImVec2(0.f, 0.f), true);
     ImGui::Text("STOCHASTIC VIDEO DIRECTOR");
     ImGui::SameLine(280.f);
-    ImGui::TextColored(p.enabled ? ImVec4(0.35f, 0.85f, 0.55f, 1.f)
-                                 : ImVec4(0.75f, 0.75f, 0.75f, 1.f),
+    ImGui::TextColored(p.enabled ? kLive : kMute,
                        "%s", p.enabled ? "RUNNING" : "PAUSED");
     if (!videoDir_->isSharedActive()) {
         ImGui::SameLine();
@@ -944,7 +913,7 @@ void ControlApp::drawVideoDirectorPanel() {
                             videoDir_->secondsUntilShared());
     } else {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.f, 0.65f, 0.25f, 1.f),
+        ImGui::TextColored(kLive,
                            "| SHARED EVENT %s",
                            videoDir_->isSharedPlaying() ? "PLAYING" : "LOADING");
     }
@@ -987,9 +956,7 @@ void ControlApp::drawVideoDirectorPanel() {
         ImGui::PushID(i + 100);
         ImGui::Text("CH %d", i);
         ImGui::SameLine(60.f);
-        ImGui::TextColored(ch->isSharedVideoPlan()
-                               ? ImVec4(1.f, 0.65f, 0.25f, 1.f)
-                               : ImVec4(0.35f, 0.75f, 1.f, 1.f),
+        ImGui::TextColored(ch->isSharedVideoPlan() ? kLive : kInk,
                            "%s%s",
                            VideoDirector::planTypeName(ch->getVideoPlanType()),
                            ch->isSharedVideoPlan() ? " / shared" : "");
@@ -1037,17 +1004,19 @@ void ControlApp::drawComposerPanel() {
     ImGui::BeginChild("ComposerPanel", ImVec2(0.f, 0.f), true);
     ImGui::Text("VISUAL COMPOSER");
     ImGui::SameLine(190.f);
-    ImGui::TextColored(p.enabled ? ImVec4(0.35f, 0.85f, 0.55f, 1.f)
-                                 : ImVec4(0.75f, 0.75f, 0.75f, 1.f),
+    ImGui::TextColored(p.enabled ? kLive : kMute,
                        "%s", p.enabled ? "ACTIVE" : "LEGACY VIDEO MODE");
     ImGui::Checkbox("Enabled", &p.enabled);
     ImGui::SameLine();
     ImGui::Checkbox("Installation program", &p.programEnabled);
     const int activeMoment = ofClamp(
         static_cast<int>(composer_->moment()), 0, 2);
-    ImGui::Text("Moment: %s  %.1fs%s",
-                momentNames[activeMoment], composer_->momentElapsed(),
-                composer_->takeoverActive() ? "  / GLOBAL TAKEOVER" : "");
+    ImGui::Text("Moment: %s  %.1fs",
+                momentNames[activeMoment], composer_->momentElapsed());
+    if (composer_->takeoverActive()) {
+        ImGui::SameLine();
+        ImGui::TextColored(kLive, "/ GLOBAL TAKEOVER");
+    }
     ImGui::SameLine();
     if (ImGui::Button("Next moment"))
         composer_->forceNextMoment();
@@ -1060,7 +1029,7 @@ void ControlApp::drawComposerPanel() {
     const CollectiveState& collective = composer_->collectiveState();
     const int collectiveIndex = ofClamp(
         static_cast<int>(collective.movement), 0, 8);
-    ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.f, 1.f),
+    ImGui::TextColored(kInk,
                        "Collective: %s  phase %.2f  revision %llu",
                        collectiveNames[collectiveIndex], collective.phase,
                        static_cast<unsigned long long>(collective.revision));
@@ -1106,6 +1075,10 @@ void ControlApp::drawComposerPanel() {
     compactSliderFloat("Transition", "##ComposerTransW", &p.transitionProbability, 0.f, 1.f);
     compactSliderFloat("Second video", "##ComposerDualVideo",
                        &p.dualVideoProbability, 0.f, 1.f);
+    compactSliderFloat("Thermal point cloud", "##ComposerThermalVideo",
+                       &p.thermalVideoProbability, 0.f, 1.f);
+    compactSliderFloat("CV point cloud", "##ComposerCvVideo",
+                       &p.computerVisionVideoProbability, 0.f, 1.f);
     compactSliderInt("Video cap", "##ComposerVideoCap",
                      &p.maxVideoPerGroup, 1, 2);
 
@@ -1142,7 +1115,7 @@ void ControlApp::drawComposerPanel() {
                        &p.generatorInvertDuration, 1.f, 60.f, "%.1f s");
     if (composer_->generatorInvertActive()) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.f, 1.f, 0.3f, 1.f), "ACTIVE");
+        ImGui::TextColored(kLive, "ACTIVE");
     }
     if (ImGui::Button("Trigger invert now"))
         composer_->forceGeneratorInvertMoment();
@@ -1154,7 +1127,7 @@ void ControlApp::drawComposerPanel() {
                        &p.polarityInvertDuration, 1.f, 60.f, "%.1f s");
     if (composer_->polarityInvertActive()) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.f, 1.f), "ACTIVE");
+        ImGui::TextColored(kLive, "ACTIVE");
     }
     if (ImGui::Button("Trigger polarity now"))
         composer_->forcePolarityInvertMoment();
@@ -1249,7 +1222,7 @@ void ControlApp::drawPerformancePanel() {
         if (ImGui::Button(startLabel.c_str(), ImVec2(240.f, 34.f)))
             performance_->start(channels_, composer_);
     } else {
-        if (ImGui::Button("Stop test", ImVec2(140.f, 34.f)))
+        if (liveButton("Stop test", true, ImVec2(140.f, 34.f)))
             performance_->stop(channels_, composer_, false);
     }
     ImGui::SameLine();
@@ -1266,10 +1239,11 @@ void ControlApp::drawPerformancePanel() {
     const float elapsed = performance_->elapsedSeconds();
     const float duration = performance_->config().durationSeconds;
     ImGui::ProgressBar(performance_->progress(), ImVec2(-1.f, 20.f));
-    ImGui::Text("Elapsed %.1f / %.1f s", elapsed, duration);
+    ImGui::TextColored(running ? kLive : kInk,
+                       "Elapsed %.1f / %.1f s", elapsed, duration);
     ImGui::SameLine();
-    ImGui::TextDisabled("Phase: %s",
-                        performance_->currentPhaseName().c_str());
+    ImGui::TextColored(running ? kLive : kMute, "Phase: %s",
+                       performance_->currentPhaseName().c_str());
 
     ImGui::Separator();
     ImGui::Text("Process CPU: %.1f%%", performance_->cpuPercent());
@@ -1325,9 +1299,7 @@ void ControlApp::drawPerformancePanel() {
     if (performance_->hasResults()) {
         ImGui::Separator();
         const bool passed = performance_->passed();
-        ImGui::TextColored(
-            passed ? ImVec4(0.35f, 0.85f, 0.55f, 1.f)
-                   : ImVec4(1.f, 0.35f, 0.35f, 1.f),
+        ImGui::TextColored(passed ? kInk : kErr,
             "%s", passed ? "PASS" : "FAIL");
         for (const auto& reason : performance_->failureReasons())
             ImGui::BulletText("%s", reason.c_str());
@@ -1344,14 +1316,19 @@ void ControlApp::drawChannelPanel(int i) {
     std::string clipName = ofFilePath::getFileName(ch->getCurrentClip());
     ImGui::Text("CHANNEL %d", i);
     ImGui::SameLine();
-    ImGui::TextDisabled("| %s", ch->isPlaying() ? "PLAYING" : "STOPPED");
+    ImGui::TextColored(ch->landscapeVideoHidden() ? kLive
+                       : (ch->isPlaying() ? kLive : kMute),
+                       "| %s",
+                       ch->landscapeVideoHidden() ? "H-VIDEO OFF"
+                       : (ch->isPlaying() ? "PLAYING" : "STOPPED"));
     ImGui::TextDisabled("%s", clipName.empty() ? "No clip loaded" : clipName.c_str());
 
     if (ImGui::Button(("Next##" + ofToString(i)).c_str())) ch->loadNextClip();
     ImGui::SameLine();
     bool playing = ch->isPlaying();
-    if (ImGui::Button(playing ? ("Pause##" + ofToString(i)).c_str()
-                               : ("Play##"  + ofToString(i)).c_str()))
+    const std::string playLabel = playing
+        ? ("Pause##" + ofToString(i)) : ("Play##" + ofToString(i));
+    if (liveButton(playLabel.c_str(), playing))
         playing ? ch->pause() : ch->play();
     ImGui::SameLine();
     if (ImGui::Button(("Stop##" + ofToString(i)).c_str())) ch->stop();

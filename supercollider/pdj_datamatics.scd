@@ -52,30 +52,29 @@ s.waitForBoot({
 	~masterGain  = 0.55;
 
 	// Número de altavoces multicanal — lo fija pdj_audio_config.scd antes del boot.
-	// 8 con Dante Virtual Soundcard (Sala Abierta / DANTE 5 / D3-1..D3-8).
+	// 8 con Dante Virtual Soundcard -> AmpCrown-1 (8 canales de recepción).
 	// 2 en reserva estéreo (dispositivo por defecto, sin DANTE en la red).
 	~numSpeakers = ~numSpeakers ? 2;
-
 	// --------------------------------------------------------------------------
 	// MOTOR ESPACIAL DBAP
 	// Posiciones de altavoz en coordenadas de sala (x, y), normalizadas 0-1.
 	//   x: izquierda (0) -> derecha (1)
 	//   y: frente (0) -> fondo (1)
-	// El orden de índices coincide con el de canales de DANTE 5:
-	//   0=D3-1, 1=D3-2, 2=D3-3, 3=D3-4, 4=D3-5, 5=D3-6, 6=D3-7, 7=D3-8
-	// Derivado de la planta de Sala Abierta. Afinar in situ con
-	// ~speakerTest tras medir las posiciones físicas.
+	// El orden de índices coincide con los canales de AmpCrown-1 (01..08):
+	//   0=AC1-ch1, 1=AC1-ch2, ..., 7=AC1-ch8
+	// Afinar in situ con ~speakerTest tras medir las posiciones físicas
+	// reales de los altavoces conectados a cada canal del AmpCrown.
 	// --------------------------------------------------------------------------
 	~speakerPositions = if(~numSpeakers == 8, {
 		[
-			[0.82, 0.12],  // D3-1: derecha, frente (alimenta 2 altavoces físicos)
-			[0.50, 0.08],  // D3-2: centro, frente
-			[0.14, 0.16],  // D3-3: izquierda, frente (alimenta 2 altavoces físicos)
-			[0.04, 0.50],  // D3-4: muro izquierdo, media profundidad
-			[0.10, 0.84],  // D3-5: izquierda, fondo
-			[0.40, 0.58],  // D3-6: agrupación central
-			[0.56, 0.74],  // D3-7: centro trasero
-			[0.44, 0.54]   // D3-8: agrupación central (cerca de D3-6)
+			[0.82, 0.12],  // AC1-ch1: derecha, frente
+			[0.50, 0.08],  // AC1-ch2: centro, frente
+			[0.14, 0.16],  // AC1-ch3: izquierda, frente
+			[0.04, 0.50],  // AC1-ch4: muro izquierdo, media profundidad
+			[0.10, 0.84],  // AC1-ch5: izquierda, fondo
+			[0.40, 0.58],  // AC1-ch6: agrupación central
+			[0.56, 0.74],  // AC1-ch7: centro trasero
+			[0.44, 0.54]   // AC1-ch8: agrupación central (cerca de ch6)
 		]
 	}, {
 		// Reserva estéreo: dos posiciones virtuales de altavoz en L/R
@@ -98,15 +97,37 @@ s.waitForBoot({
 		gains / rms
 	};
 
+	// Dos motores de salida explícitos:
+	//   estéreo -> panoramización Pan2 tradicional del programa;
+	//   DANTE   -> distribución DBAP sobre los ocho canales físicos.
+	~routeByGains = { |sig, gains|
+		if(~numSpeakers == 2, {
+			var sum = (gains[0] + gains[1]).max(0.0001);
+			var pan = ((gains[1] - gains[0]) / sum).clip(-1, 1);
+			Pan2.ar(sig, pan);
+		}, {
+			(sig ! ~numSpeakers) * gains
+		})
+	};
+	~routeByPosition = { |sig, position, width = 0.5|
+		if(~numSpeakers == 2, {
+			Pan2.ar(sig, position.linlin(0, 2, -1, 1).clip(-1, 1));
+		}, {
+			PanAz.ar(~numSpeakers, sig, position, 1, width)
+		})
+	};
+
 	// Rutina de prueba de altavoces — aislar cada uno en secuencia.
 	// Ejecutar con ~testOsc.play o oF activo; escuchar y recorrer la sala.
 	~speakerTest = {
 		Routine({
+			var offset = ~pdjOutputOffset ? 0;
 			~numSpeakers.do { |spk|
 				var g = Array.fill(~numSpeakers, 0.0);
 				g[spk] = 0.8;
 				~ch.do { |st| st.gainBus.setn(g) };
-				("PDJ speaker test: " ++ spk ++ " -> DANTE D3-" ++ (spk + 1)).postln;
+				("PDJ speaker test: " ++ spk ++ " -> AmpCrown-5 ch" ++ (spk + 1)
+					++ " (DVS " ++ (offset + spk + 1) ++ ")").postln;
 				2.0.wait;
 			};
 			// restaurar difusión centrada
@@ -409,7 +430,7 @@ s.waitForBoot({
 		var sig      = SelectX.ar(voice.lag(4).clip(0, 3), [abyss, scan, data, haze]) + air;
 		sig = LPF.ar(sig, tension.linexp(0, 1, 1800, 10500));
 		sig = LeakDC.ar(sig * presence * gate * master);
-		Out.ar(out, (sig ! ~numSpeakers) * gains);
+		Out.ar(out, ~routeByGains.(sig, gains));
 	}).add;
 
 	// El continuo clic -> ritmo -> altura -> ruido, en un solo generador.
@@ -438,7 +459,7 @@ s.waitForBoot({
 		sig = BPF.ar(sig, center, 0.18);
 		sig = ~crushSignal.(sig, crush * 0.45);
 		sig = sig * amp.sqrt * sceneAmp.lag(5) * (0.55 + (tension * 0.45)) * gate * master;
-		Out.ar(out, (sig ! ~numSpeakers) * gains);
+		Out.ar(out, ~routeByGains.(sig, gains));
 	}).add;
 
 	// Clic agudo disperso / impulso de dato (colisión / balón / lecturas de rejilla).
@@ -453,7 +474,7 @@ s.waitForBoot({
 		sig = Ringz.ar(sig, freq, decay * 0.9) * 0.4
 			+ (WhiteNoise.ar * env * 0.08);
 		sig = HPF.ar(sig, 1800);
-		Out.ar(out, PanAz.ar(~numSpeakers, sig * amp, pos, 1, 0.5));
+		Out.ar(out, ~routeByPosition.(sig * amp, pos, 0.5));
 	}).add;
 
 	// Estallido corto de glitch digital — cortes de montaje (cambios de modo,
@@ -466,7 +487,7 @@ s.waitForBoot({
 		var sig = Latch.ar(WhiteNoise.ar, clk);
 		sig = RHPF.ar(sig, TExpRand.ar(1500, 9000, clk), 0.35);
 		sig = sig * env * amp;
-		Out.ar(out, PanAz.ar(~numSpeakers, sig, pos, 1, 0.5));
+		Out.ar(out, ~routeByPosition.(sig, pos, 0.5));
 	}).add;
 
 	// Primer plano de eventos significativos: la colisión es una onda de
@@ -479,7 +500,7 @@ s.waitForBoot({
 		var freq = XLine.kr(62 + (depth * 24), 28, 1.8);
 		var low  = SinOsc.ar(freq, 0, 0.55) + (BPF.ar(BrownNoise.ar, 90, 0.25) * 0.25);
 		var edge = BPF.ar(PinkNoise.ar, 900 + (depth * 1800), 0.18) * 0.08;
-		Out.ar(out, PanAz.ar(~numSpeakers, (low + edge) * env * amp, pos, 1, 0.5));
+		Out.ar(out, ~routeByPosition.((low + edge) * env * amp, pos, 0.5));
 	}).add;
 
 	SynthDef(\pdjTrace, { |out = 0, amp = 0.16, panStart = 0, panEnd = 0, height = 0.5|
@@ -487,7 +508,7 @@ s.waitForBoot({
 		var pos = Line.kr(panStart, panEnd, 1.2).linlin(-1, 1, 0, 2);
 		var cf  = height.linexp(0, 1, 650, 5200);
 		var sig = BPF.ar(PinkNoise.ar, cf * XLine.kr(1.2, 0.72, 1.2), 0.07);
-		Out.ar(out, PanAz.ar(~numSpeakers, sig * env * amp, pos, 1, 0.6));
+		Out.ar(out, ~routeByPosition.(sig * env * amp, pos, 0.6));
 	}).add;
 
 	// Servicio de clear de GlobalDirector: un levantamiento espectral difuso
@@ -517,7 +538,7 @@ s.waitForBoot({
 		var source  = PinkNoise.ar + (GrayNoise.ar * color.clip(0, 1) * 0.38);
 		var sig     = BPF.ar(source, center, 0.035 + (color * 0.08));
 		sig = sig + (HPF.ar(source, center.clip(900, 9000)) * 0.045);
-		Out.ar(out, PanAz.ar(~numSpeakers, sig * env * amp, pos, 1, 0.6));
+		Out.ar(out, ~routeByPosition.(sig * env * amp, pos, 0.6));
 	}).add;
 
 	// Centro espectral lento compartido — una sola frecuencia errante que
@@ -550,7 +571,7 @@ s.waitForBoot({
 		sig = sig + (BPF.ar(GrayNoise.ar, center * (2.3 + (variant * 0.2)), 0.04) * tension.squared * 0.12);
 		sig = ~crushSignal.(sig, crush * 0.3);
 		sig = sig * (0.12 + amp.sqrt) * (0.7 + (tension * 0.3)) * sceneAmp.lag(5) * gate * master;
-		Out.ar(out, (sig ! ~numSpeakers) * gains);
+		Out.ar(out, ~routeByGains.(sig, gains));
 	}).add;
 
 	// Densidad de público → presión de seno grave — unidad elemental de subgraves,
@@ -561,7 +582,7 @@ s.waitForBoot({
 		var gains = In.kr(gainBus, ~numSpeakers).lag(2.0).max(0);
 		var sig   = (SinOsc.ar(freq) + (SinOsc.ar(freq * 1.005) * 0.45)) * a * 0.22;
 		sig = LPF.ar(sig, 120);
-		Out.ar(out, (sig ! ~numSpeakers) * gains);
+		Out.ar(out, ~routeByGains.(sig, gains));
 	}).add;
 
 	// Wash textural en evolución continua — portadora principal de drone/ambiente
@@ -587,7 +608,7 @@ s.waitForBoot({
 		sig = sig + (BPF.ar(GrayNoise.ar, cf * (3.2 + tension), 0.035 + (tension * 0.04)) * motion * (0.08 + (tension * 0.10)));
 		sig = ~crushSignal.(sig, crush * 0.25);
 		sig = sig * (0.15 + amt) * (0.72 + (tension * 0.28)) * gate * master;
-		Out.ar(out, PanAz.ar(~numSpeakers, sig, wanderPos, 1, 0.8));
+		Out.ar(out, ~routeByPosition.(sig, wanderPos, 0.8));
 	}).add;
 
 	// Crackle / polvo de dato — la densidad sigue el ruido macro; cada grano
@@ -603,7 +624,7 @@ s.waitForBoot({
 		var cf      = color.linexp(0, 1, 800, 9000);
 		var sig     = BPF.ar(PinkNoise.ar, cf, 0.08) * env * master;
 		// Very narrow width (0.05) = nearly point-source per grain
-		Out.ar(out, PanAz.ar(~numSpeakers, sig * gate, randPos, 1, 0.05));
+		Out.ar(out, ~routeByPosition.(sig * gate, randPos, 0.05));
 	}).add;
 
 	// Envío espacial: delay ping-pong suave que alimenta una reverb algorítmica
@@ -612,21 +633,22 @@ s.waitForBoot({
 	// drone/ambiente — una cola difusa real, no solo una repetición de delay —
 	// y el análogo sonoro de la profundidad dimensional (capa 4).
 	SynthDef(\pdjDelayFX, { |inBus, out = 0, spaceBus, mix = 0.25|
-		var wet     = In.kr(spaceBus, 1).lag(3);
-		// Mix down all input channels to a mono signal for reverb input
-		var sig     = Mix.ar(In.ar(inBus, ~numSpeakers));
-		var dly     = DelayC.ar(sig, 0.12, [0.071, 0.103]);
-		var verb    = GVerb.ar(
+		var wet, sig, dly, verb, diffuse, wander;
+		// All var declarations must be at the top of the function body.
+		wet     = In.kr(spaceBus, 1).lag(3);
+		sig     = Mix.ar(In.ar(inBus, ~numSpeakers));
+		dly     = DelayC.ar(sig, 0.12, [0.071, 0.103]);
+		verb    = GVerb.ar(
 			Mix.ar(dly), 50, 5, 0.5, 0.7, 15, 0,
 			wet.linlin(0, 1, 0.34, 0.72),
 			wet.linlin(0, 1, 0.15, 0.55), 300
 		);
-		// Diffuse reverb tail across all speakers with slow per-speaker wander
-		var diffuse = (verb[0] + verb[1]) * 0.5;
-		diffuse     = HPF.ar(LPF.ar(diffuse, 6200), 45);
-		var wander  = LFNoise1.kr(
+		// Diffuse reverb tail across all speakers with slow per-speaker wander.
+		diffuse = (verb[0] + verb[1]) * 0.5;
+		wander  = LFNoise1.kr(
 			Array.fill(~numSpeakers, { |i| 0.022 + (i * 0.004) })
 		).range(0.4, 1.0);
+		diffuse = Sanitize.ar(HPF.ar(LPF.ar(diffuse, 6200), 45), 0);
 		Out.ar(out, (diffuse ! ~numSpeakers) * wander * wet * mix);
 	}).add;
 
@@ -640,11 +662,18 @@ s.waitForBoot({
 	}).add;
 
 	// Bus master: mezcla seca + envío espacial, clip suave + limiter
-	SynthDef(\pdjMaster, { |inBus, delayBus, out = 0, gain = 0.55|
+	SynthDef(\pdjMaster, { |inBus, delayBus, gainBus, out = 0|
 		var dry = In.ar(inBus,    ~numSpeakers);
 		var wet = In.ar(delayBus, ~numSpeakers);
-		var sig = (dry + wet) * gain;
+		var gain = In.kr(gainBus, 1).lag(0.08);
+		// Stereo fallback needs the original program's direct, audible level;
+		// DANTE keeps unity gain before its venue amplification.
+		var modeGain = if(~numSpeakers == 2, { 2.2 }, { 1.0 });
+		var sig = (dry + wet) * gain * modeGain;
 		sig = (sig * 1.2).tanh * 0.9;
+		// A single invalid sample from any generative layer would otherwise
+		// contaminate the sum and make the complete hardware stream silent.
+		sig = Sanitize.ar(sig, 0);
 		sig = Limiter.ar(sig, 0.95, 0.01);
 		Out.ar(out, sig);
 	}).add;
@@ -656,7 +685,15 @@ s.waitForBoot({
 	// --------------------------------------------------------------------------
 	~fxBus    = Bus.audio(s, ~numSpeakers);
 	~delayBus = Bus.audio(s, ~numSpeakers);
-	~master = Synth(\pdjMaster, [\inBus, ~fxBus, \delayBus, ~delayBus, \gain, ~masterGain]);
+	~masterGainBus = Bus.control(s, 1);
+	~masterGainBus.set(~masterGain);
+	~pdjOutputOffset = ~pdjOutputOffset ? 0;
+	~master = Synth(\pdjMaster, [
+		\inBus, ~fxBus,
+		\delayBus, ~delayBus,
+		\gainBus, ~masterGainBus,
+		\out, ~pdjOutputOffset
+	]);
 	~channelBases = [31.7, 33.1, 35.9, 38.3, 41.1, 43.7, 47.3, 50.9];
 
 	~toneBanks = Array.fill(~numChannels, { |i|
@@ -1267,7 +1304,7 @@ s.waitForBoot({
 		var st, energy, flow, amp, rate, noise, spaceW, activity, tension;
 		var slowBias, fastBias, clear, clipArc, voiceTarget, dynamicColor, variant;
 		var droneAmp, airAmp, pulseAmp;
-		var srcX, srcY, rolloff, spread, gains;
+		var srcX, srcY, rolloff, spread, gains, pan;
 		var evolution, stage, formRise, formFall, microWindow, genEnvelope;
 		var scoreActive, scoreIntensity, scoreDensity, scoreEnvelope;
 		var roleDrone, rolePulse, roleAir, organizationGain;
@@ -1444,14 +1481,14 @@ s.waitForBoot({
 			pulseAmp = pulseAmp * 0.72;
 			airAmp = airAmp * 1.12;
 		}
-		{ collectiveMovement == 4 } { // convergencia: collapse toward D3-2 (front center)
+		{ collectiveMovement == 4 } { // convergencia: collapse toward AC1-ch2 (front center)
 			srcX = 0.50; srcY = 0.08; rolloff = 2.2; spread = 0.0;
 			droneAmp = droneAmp * 1.18;
 			airAmp = airAmp * 0.64;
 			pulseAmp = pulseAmp * 1.48;
 			rate = ((~visualTransport.bpm / 60) * 4).clip(1, 18);
 		}
-		{ collectiveMovement == 5 } { // fragmentación: maximum spread, exploits D3-6/D3-8 cluster
+		{ collectiveMovement == 5 } { // fragmentación: maximum spread, exploits AC1-ch6/ch8 cluster
 			droneAmp = droneAmp * 0.38;
 			airAmp = airAmp * 1.18;
 			pulseAmp = pulseAmp * 1.42;
@@ -1475,8 +1512,17 @@ s.waitForBoot({
 			spread = spread * 0.6;
 		};
 
-		// Compute per-speaker DBAP gains and write to gainBus.
-		gains = ~dbapGains.(srcX, srcY, rolloff, spread);
+		// Stereo restores the pre-DANTE direct centroid/flow Pan2 law.
+		// DANTE retains the two-dimensional DBAP room mapping.
+		gains = if(~numSpeakers == 2, {
+			pan = (
+				srcX.linlin(0, 1, -0.85, 0.85)
+				+ ((st.flowAng / pi).clip(-1, 1) * flow * 0.18)
+			).clip(-1, 1) * spaceW;
+			[1 - pan, 1 + pan];
+		}, {
+			~dbapGains.(srcX, srcY, rolloff, spread);
+		});
 		// Dim gains proportionally on cleared channels (room wipe spatial complement).
 		gains = gains * (1 - (clear * 0.88));
 		// Store for one-shot event triggers so clicks/impacts follow detected position.
@@ -2014,7 +2060,21 @@ s.waitForBoot({
 	// --------------------------------------------------------------------------
 	// CONTROLES EN VIVO
 	// --------------------------------------------------------------------------
-	~setMaster  = { |g| ~masterGain = g; ~master.set(\gain, g) };
+	~setMaster  = { |g|
+		g = g.asFloat.clip(0, 1);
+		~masterGain = g;
+		~masterGainBus.set(g);
+	};
+	// Control maestro remoto desde el GUI de openFrameworks. Funciona igual
+	// aunque este motor se haya iniciado en otra terminal con Start Audio.command:
+	// la comunicación es OSC/UDP y no depende del proceso que lanzó sclang.
+	OSCdef(\pdj_master_volume, { |msg|
+		var gain = (msg[1] ? ~masterGain).asFloat.clip(0, 1);
+		var replyPort = (msg[2] ? 9002).asInteger;
+		~setMaster.(gain);
+		NetAddr("127.0.0.1", replyPort).sendMsg(
+			'/pdj/audio/master/ack', gain);
+	}, '/pdj/audio/master');
 	~setNoise   = { |v| ~macro.noise   = v.clip(0, 1); ~gNoiseBus.set(v) };
 	~setSpace   = { |v| ~macro.space   = v.clip(0, 1); ~gSpaceBus.set(v) };
 	~setDensity = { |v| ~macro.density = v.clip(0, 1); ~gDensityBus.set(v) };
@@ -2086,6 +2146,7 @@ s.waitForBoot({
 			};
 			OSCdef(\pdj_visual_clock).free;
 			OSCdef(\pdj_collective_state).free;
+			OSCdef(\pdj_master_volume).free;
 			~testOsc.stop;
 			~auditionRoutine.tryPerform(\stop);
 			~auditioning = false;
@@ -2105,6 +2166,7 @@ s.waitForBoot({
 			~ch.do { |st|
 				st.ampBus.free; st.gainBus.free; st.rateBus.free; st.noiseBus.free; st.tensionBus.free;
 			};
+			~masterGainBus.free;
 			~gNoiseBus.free; ~gDensityBus.free; ~gSpaceBus.free; ~gCrushBus.free;
 			~gGate1Bus.free; ~gGate2Bus.free; ~gGate3Bus.free; ~selfBus.free; ~gSpectralBus.free;
 			~gMotionBus.free; ~gCrowdBus.free; ~gTensionBus.free;

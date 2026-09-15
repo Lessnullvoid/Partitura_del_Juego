@@ -28,16 +28,20 @@ La instalación no intenta analizar ni interpretar el partido. Usa el movimiento
 
 ## Arquitectura del sistema
 
-La instalación completa corre en un ordenador. Comparte `ClipPool`, `VideoDirector`, `GlobalDirector`, `VisualComposer` y `OSCSender` entre ocho instancias de `Channel`. Las dos ventanas de presentación comparten el contexto OpenGL: la ventana A dibuja canales 0–3 y la B canales 4–7.
+La instalación completa corre en un ordenador. Comparte `ClipPool`, `VideoDirector`, `GlobalDirector`, `VisualComposer` y `OSCSender` entre ocho instancias de `Channel`. Las dos ventanas de presentación comparten el contexto OpenGL: la ventana A dibuja canales 0–3 y la B canales 4–7. `DisplayProbe` detecta los displays externos al arrancar y asigna automáticamente Thunderbolt = Muro A, HDMI = Muro B. `PresentationSafety` es un interruptor de operador que oculta el vídeo en los canales apaisados (Wall B) sin interrumpir los generadores ni el muro de retratos.
 
 ```mermaid
 flowchart TB
     Settings[settings.json] --> VideoDirector
     Settings --> VisualComposer
+    DisplayProbe --> PresentationSafety
+    DisplayProbe --> WindowA
+    DisplayProbe --> WindowB
     ClipPool --> VideoDirector
     VideoDirector --> Channels["8 x Channel"]
     VisualComposer --> Channels
     GlobalDirector --> Channels
+    PresentationSafety --> Channels
     Channels --> WindowA["Presentation A: channels 0-3"]
     Channels --> WindowB["Presentation B: channels 4-7"]
     WindowA --> ControllerA["ICUIXIAN A"]
@@ -72,14 +76,14 @@ Anchura lógica total del sistema: 8640 px (8 × 1080). La resolución real por 
 
 ## Pipeline de visión artificial
 
-Cada canal ejecuta un pipeline OpenCV independiente en cada fotograma. El vídeo se escala a la mitad de resolución para el análisis (FBO de 270×480 px), manteniendo la ruta de visualización en GPU a resolución completa (1080×1920 px).
+Cada canal ejecuta un pipeline OpenCV independiente en cada fotograma. El vídeo se escala a la mitad de resolución para el análisis, manteniendo la ruta de visualización en GPU a resolución completa. El buffer de análisis respeta la orientación del canal: **270×480 px** para los canales de retrato (Wall A, canales 0–3) y **480×270 px** para los canales apaisados (Wall B, canales 4–7). El procesamiento CV corre en un hilo trabajador independiente; el hilo principal publica píxeles y consume el resultado sin bloquear el render.
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8","edgeLabelBackground":"#1a1a1a"}}}%%
 flowchart TB
     VP["ofVideoPlayer<br/>resolución completa"]
     BWF["bwFbo — 1080 × 1920<br/>shader bw.frag"]
-    CVF["cvFbo — 270 × 480<br/>readToPixels → grayscale"]
+    CVF["cvFbo — 270×480 (retrato) / 480×270 (apaisado)<br/>readToPixels → grayscale"]
     UPD["CVPipeline::update()"]
 
     MOG["BackgroundSubtractorMOG2<br/>máscara binaria de primer plano"]
@@ -311,7 +315,7 @@ Un canal puede anular claves individuales bajo `channels[N].videoPointCloud`. Lo
 
 ### Lenguaje visual procedimental
 
-`VisualGenerator` implementa 15 escenas sintéticas que pueden ocupar la pantalla sin vídeo o transformar el último fotograma capturado. El `VisualComposer` programa y organiza estos generadores en el tiempo; `OrbitalRings` está deshabilitado del programa automático por defecto (`disabledGenerators`).
+`VisualGenerator` implementa 15 escenas sintéticas que pueden ocupar la pantalla sin vídeo o transformar el último fotograma capturado. El `VisualComposer` programa y organiza estos generadores en el tiempo; `OrbitalRings` y `AnalogNoise` están deshabilitados del programa automático por defecto (`disabledGenerators`). `AnalogNoise` se activa únicamente como evento periódico de ruido durante Intercalation.
 
 | Generador | Índice | Descripción |
 |---|---|---|
@@ -329,7 +333,7 @@ Un canal puede anular claves individuales bajo `channels[N].videoPointCloud`. Lo
 | **OrbitalRings** | 11 | Anillos orbitales — *deshabilitado del programa automático por defecto* |
 | **Strobe** | 12 | Estroboscopio de muro completo sincronizado al pulso de Intercalation |
 | **DividedStrobe** | 13 | Estroboscopio dividido: mitades del muro en fase y contrafase alternadas |
-| **AnalogNoise** | 14 | Ruido analógico de muro completo (evento periódico sincronizado) |
+| **AnalogNoise** | 14 | Ruido analógico de muro completo — *deshabilitado del programa automático por defecto*; se activa solo como evento periódico de ruido durante Intercalation |
 
 La paleta de generadores es monocroma: negro/blanco. La variación se calcula a partir de semilla, tiempo y datos; no usa aleatoriedad nueva en cada fotograma.
 
@@ -342,6 +346,24 @@ La paleta de generadores es monocroma: negro/blanco. La variación se calcula a 
 | **PulseSystem** | Todos los canales ejecutan el generador `Pulse` en unísono al BPM global. Duración configurada en `pulseMomentDuration` (por defecto 24 s). |
 | **BarScanSystem** | Todos los canales ejecutan el generador `BarScan` con fases independientes. Duración en `barScanMomentDuration` (por defecto 32 s). |
 | **Intercalation** | Régimen libre: el compositor programa vídeo, generadores, Breath y transiciones por canal y grupo. La mayor parte del tiempo de instalación vive aquí. |
+
+#### Modos de color de la nube de puntos de vídeo
+
+Cuando el compositor programa un capítulo de contenido `Video` y la nube de puntos está habilitada, el `VisualComposer` elige el modo de color del `VideoPointCloudGenerator` antes de iniciar el capítulo:
+
+| `VideoDisplayMode` | Enum | Descripción |
+|---|---|---|
+| **PointCloud** | 0 | Nube de puntos estándar con luminancia como profundidad — modo por defecto |
+| **Thermal** | 1 | Paleta Ironbow / FLIR sobre la nube de puntos (misma geometría, colores térmicos) |
+| **ComputerVision** | 2 | Nube de puntos B&W + Ironbow en las áreas de detección de blobs |
+
+El sorteo se aplica en este orden: si el sorteo `thermalVideoProbability` tiene éxito, se usa `Thermal`; de lo contrario, si el sorteo `computerVisionVideoProbability` tiene éxito, se usa `ComputerVision`; en caso contrario, se usa `PointCloud`. Solo se aplica cuando `videoPointCloud.enabled` es `true`; si la nube de puntos está desactivada, el modo visual es siempre `PointCloud` (vídeo directo).
+
+```jsonc
+// Dentro de "visualComposer":
+"thermalVideoProbability": 0.25,
+"computerVisionVideoProbability": 0.25
+```
 
 #### Gramática para ocho pantallas
 
@@ -360,13 +382,13 @@ Cada capítulo generativo recorre **Appearance → Development → Threshold →
 
 `Suspension` · `Codification` · `Accumulation` · `Propagation` · `Convergence` · `Fragmentation` · `Saturation` · `Rupture` · `Residue`
 
-Un candidato debe permanecer estable `collectiveDecisionHold` segundos antes de adoptarse, y cada estado tiene una permanencia mínima protegida (`collectiveMinimumDwell`).
+Un candidato debe permanecer estable `collectiveDecisionHold` segundos antes de adoptarse, y cada estado tiene una permanencia mínima protegida (`collectiveMinimumDwell`). `collectiveEventCooldown` impone un período de enfriamiento mínimo entre cambios de estado; `collectiveResponse` pondera la sensibilidad del sistema (0 = inerte, 1 = reactivo máximo).
 
 #### Eventos periódicos durante Intercalation
 
 | Evento | Parámetros | Descripción |
 |---|---|---|
-| **Noise event** | `noiseEventInterval` / `noiseEventDuration` | Ruido analógico (`AnalogNoise`) a muro completo durante unos segundos. |
+| **Noise event** | `noiseEventInterval` / `noiseEventDuration` | Generador `AnalogNoise` (índice 14) a muro completo durante unos segundos. `AnalogNoise` está excluido del programa automático y solo se activa por este evento. |
 | **Generator invert** | `generatorInvertInterval` / `generatorInvertDuration` | Los canales en modo generador invierten a fondo blanco/gráficos negros y luego revierten. Los canales en nube de puntos no se ven afectados. |
 | **Polarity invert** | `polarityInvertInterval` / `polarityInvertDuration` | Inversión de polaridad de canal completo (generadores y nubes de puntos). Agenda independiente de generator invert. |
 | **Takeover** | `takeoverIntervalMin/Max` / `takeoverDurationMin/Max` | Un generador ocupa todos los canales simultáneamente y luego el compositor retoma la programación por canal. |
@@ -522,6 +544,22 @@ El proceso transmite cuatro bundles UDP pequeños por canal y fotograma (~30 fps
 | `.../event/ball/y` | float | y normalizada del balón, 0–1 |
 | `.../event/crowd` | float | densidad de multitud, 0–1 |
 | `.../event/leg_distance` | float | elongación media de blobs, 0–1 |
+| `.../generator/phase` | float | fase interna del capítulo, 0–1 |
+| `.../generator/stage` | int | etapa temporal 0–4 |
+| `.../generator/stage_progress` | float | progreso interno de etapa, 0–1 |
+| `.../generator/envelope` | float | envolvente narrativa, 0–1 |
+| `.../generator/intensity` | float | intensidad resuelta del capítulo, 0–1 |
+| `.../generator/density` | float | densidad resuelta del capítulo, 0–1 |
+| `.../generator/role_phase` | float | fase de rol analítico del canal, 0–1 |
+| `.../generator/propagation_delay` | float | retardo de propagación normalizado, 0–1 |
+| `.../generator/observed_group` | int | grupo observado por este canal (0=A, 1=B) |
+
+El canal 0 añade además dos mensajes globales al bundle core en cada fotograma:
+
+| Dirección | Args (en orden) | Descripción |
+|---|---|---|
+| `/pdj/clock/state` | bpm(float) beatPhase(float) beatIndex(int) subdivisionIndex(int) beatSubdivision(int) subdivisionPulse(int) | Reloj compartido del compositor — referencia de tempo para los ocho canales |
+| `/pdj/collective/state` | movement(int) phase(float) activity(float) coherence(float) diversity(float) convergence(float) population(float) tension(float) dominantGenerator(int) revision(int) | Movimiento colectivo global inferido de los ocho flujos CV |
 
 **Bundle de blobs** — siempre 8 mensajes (uno por slot); slots inactivos llevan ceros:
 
@@ -537,24 +575,60 @@ El proceso transmite cuatro bundles UDP pequeños por canal y fotograma (~30 fps
 | `.../video/position` | float | posición de reproducción, 0–1 |
 | `.../video/duration` | float | duración del clip en segundos |
 | `.../video/revision` | int | se incrementa en cada cambio de clip |
-| `.../score/mode` | int | modo visual activo 0–13 |
+| `.../video/plan_type` | int | tipo de plan: 0=ShortFragment 1=LongFragment 2=FullVideo |
+| `.../video/shared` | int | 1 durante evento compartido, 0 en reproducción independiente |
+| `.../score/mode` | int | modo visual activo 0–12 |
 | `.../score/revision` | int | se incrementa en cada transición de modo |
 | `.../director/temporal` | int | `TemporalPhase`: 0=Idle 1=SlowRampDown 2=SlowHold 3=SlowRampUp 4=FastRampUp 5=FastHold 6=FastRampDown |
 | `.../director/speed` | float | multiplicador de velocidad actual |
 | `.../director/clear` | int | `ClearPhase`: 0=Idle 1=FadeIn 2=Hold 3=FadeOut |
 | `.../director/clear_alpha` | float | opacidad del borrado, 0–1 |
+
+**Bundle de generador** — enviado solo cuando cambia la revisión o cada 6 fotogramas como heartbeat:
+
+| Dirección | Tipo | Contenido |
+|---|---|---|
 | `.../generator/active` | int | 1 durante Generator o Transition |
-| `.../generator/mode` | int | escena 0–7 |
+| `.../generator/content` | int | tipo de contenido: 0=Video 1=Generator 2=Breath 3=Transition |
+| `.../generator/mode` | int | generador activo 0–14 |
 | `.../generator/revision` | int | revisión de capítulo |
-| `.../generator/organization` | int | Unison, Propagation, Counterpoint o 4 + 4 |
+| `.../generator/organization` | int | 0=Unison 1=Propagation 2=Counterpoint 3=Group4Plus4 |
 | `.../generator/role` | int | rol analítico del canal 0–7 |
-| `.../generator/stage` | int | etapa temporal 0–4 |
-| `.../generator/stage_progress` | float | progreso interno de etapa, 0–1 |
 | `.../generator/beat_phase` | float | fase del pulso compartido, 0–1 |
 | `.../generator/beat_index` | int | contador de pulsos |
-| `.../generator/envelope` | float | envolvente narrativa, 0–1 |
-| `.../generator/seed` | int | semilla reproducible del capítulo |
+| `.../generator/subdivision` | float | pulso de subdivisión activo, 0–1 |
+| `.../generator/seed` | int | semilla del capítulo |
+| `.../generator/resolved_seed` | int | semilla resuelta con organización y rol |
 | `.../generator/transition` | int | 1 durante ThresholdBridge |
+| `.../program/enabled` | int | 1 si el programa automático está habilitado |
+| `.../program/moment` | int | 0=PulseSystem 1=BarScanSystem 2=Intercalation |
+| `.../program/group_video_count` | int | canales con vídeo activo en el grupo |
+| `.../program/takeover` | int | 1 durante evento takeover |
+
+**Bundle VPC** (dentro del bundle de generador) — estado de la nube de puntos de vídeo por canal:
+
+| Dirección | Tipo | Contenido |
+|---|---|---|
+| `/pdjv/channel/N/vpc/enabled` | int | 1 si la nube de puntos está activa |
+| `/pdjv/channel/N/vpc/depthSource` | int | 0=Luminance 1=PdjvDepth 2=Hybrid |
+| `/pdjv/channel/N/vpc/maskMode` | int | 0=FullFrame 1=PlayersOnly 2=PlayersEmphasized |
+| `/pdjv/channel/N/vpc/preset` | int | índice de preset activo |
+| `/pdjv/channel/N/vpc/gridWidth` | int | resolución horizontal de la cuadrícula UV |
+| `/pdjv/channel/N/vpc/gridHeight` | int | resolución vertical de la cuadrícula UV |
+| `/pdjv/channel/N/vpc/depthScale` | float | escala de profundidad |
+| `/pdjv/channel/N/vpc/pointSize` | float | tamaño de punto en px |
+| `/pdjv/channel/N/vpc/luminanceFloor` | float | suelo de luminancia |
+| `/pdjv/channel/N/vpc/colorGain` | float | ganancia de color |
+| `/pdjv/channel/N/vpc/cameraYaw` | float | rotación horizontal de cámara (rad) |
+| `/pdjv/channel/N/vpc/cameraDistance` | float | distancia de cámara |
+| `/pdjv/channel/N/vpc/feedbackEnabled` | int | 1 si el buffer de retroalimentación está activo |
+| `/pdjv/channel/N/vpc/feedbackDecay` | float | factor de decaimiento del buffer, 0–1 |
+
+**Mensaje de volumen** — enviado desde la ControlApp cuando cambia el control de master:
+
+| Dirección | Args | Descripción |
+|---|---|---|
+| `/pdj/audio/master` | volume(float) replyPort(int) | Volumen master 0–1; SuperCollider confirma el cambio en el puerto indicado |
 
 ### Motor de audio SuperCollider
 
@@ -677,7 +751,7 @@ La ControlApp es una ventana ImGui independiente accesible con la tecla `U`. Est
 
 ![Vista general de los canales](ui/ui_vista_general.png)
 
-La pestaña **Overview** muestra el estado operativo de los ocho canales simultáneamente. Cada columna presenta transporte (clip activo, Next / Pause / Stop, velocidad), modo visual activo, estado en vivo de los cuatro detectores de eventos (Collision, Ball, Crowd density, Leg distance) y telemetría CV cuadro a cuadro (Motion energy, Flow magnitude, Flow angle, Blobs, Contour). La barra superior expone la configuración OSC y el total de clips disponibles. La tecla `U` oculta toda la interfaz para la presentación.
+La pestaña **Overview** muestra el estado operativo de los ocho canales simultáneamente. Cada columna presenta transporte (clip activo, Next / Pause / Stop, velocidad), modo visual activo, estado en vivo de los cuatro detectores de eventos (Collision, Ball, Crowd density, Leg distance) y telemetría CV cuadro a cuadro (Motion energy, Flow magnitude, Flow angle, Blobs, Contour). La barra superior expone la configuración OSC, el total de clips disponibles, los botones de identificación de muro (**Identify A**, **Identify B**, **Identify both**) y el botón **Hide H-wall video** / **H-wall video OFF** que activa `PresentationSafety`: oculta el vídeo en los canales apaisados (Wall B, 4–7) dejando solo generadores y respiraciones activos mientras el muro de retratos sigue operando con normalidad. La tecla `U` oculta toda la interfaz para la presentación.
 
 ---
 
@@ -822,6 +896,25 @@ Todos los parámetros en tiempo de ejecución están en `bin/data/settings.json`
     // Transmisión OSC
     "osc": { "host": "localhost", "port": 9001, "listenPort": 9002 },
 
+    // Parámetros de los generadores procedimentales
+    "generators": {
+        "intensity": 0.65,
+        "density": 0.5,
+        "glowGain": 0.9,
+        "glowRadius": 2.2,
+        "feedbackDecay": 0.82,
+        "detailTier": 2,
+        "primaryColor": [238, 238, 238],
+        "secondaryColor": [112, 112, 112],
+        "showHud": false
+    },
+
+    // Motor de audio
+    "audio": { "masterVolume": 0.55 },
+
+    // Polaridad global de imagen
+    "visuals": { "invertPolarity": false },
+
     // Visión artificial
     "cv": {
         "halfRes": true,
@@ -852,10 +945,17 @@ Todos los parámetros en tiempo de ejecución están en `bin/data/settings.json`
         "enabled": true,
         "seed": 0,             // 0 = semilla aleatoria por sesión; != 0 = reproducible
         "bpm": 90.0,
+        "beatSubdivision": 4,
         "generatorProbability": 0.35,
         "videoProbability": 0.45,
+        "thermalVideoProbability": 0.25,         // probabilidad de paleta térmica en VPC
+        "computerVisionVideoProbability": 0.25,  // probabilidad de modo CV en VPC
         "organizationWeights": [0.2, 0.3, 0.35, 0.15],  // Unison, Propagation, Counterpoint, 4+4
-        "disabledGenerators": [11, 14]                   // lista de generadores excluidos del programa
+        "disabledGenerators": [11, 14],          // OrbitalRings y AnalogNoise fuera del programa
+        "collectiveDecisionHold": 1.25,
+        "collectiveMinimumDwell": 4.0,
+        "collectiveEventCooldown": 16.0,
+        "collectiveResponse": 0.72
     },
 
     // Nube de puntos de vídeo por GPU
@@ -875,8 +975,8 @@ Todos los parámetros en tiempo de ejecución están en `bin/data/settings.json`
         "brand": "ICUIXIAN", "model": "0104-XZ", "asin": "B0DM98NVSH",
         "controllers": 2,
         "inputWidth": 1920, "inputHeight": 1080, "refreshHz": 60.0,
-        "wallA": { "layout": "4x1", "panelOrientation": "portrait",   "rotationDegrees": 90 },
-        "wallB": { "layout": "2x2", "panelOrientation": "landscape",  "rotationDegrees": 0  }
+        "wallA": { "connector": "thunderbolt", "layout": "4x1", "panelOrientation": "portrait",   "rotationDegrees": 90 },
+        "wallB": { "connector": "hdmi",        "layout": "2x2", "panelOrientation": "landscape",  "rotationDegrees": 0  }
     },
 
     // Prueba de rendimiento
@@ -977,29 +1077,29 @@ La configuración usa dos unidades ICUIXIAN `0104-XZ` (ASIN `B0DM98NVSH`) con di
 
 **Controlador A — muro de retratos (Ventana A, canales 0–3):**
 
-1. Conectar la primera salida del Mac a `HDMI IN` de la unidad A.
-2. Conectar `HDMI OUT 1–4` a los cuatro paneles en retrato, de izquierda a derecha.
+1. Conectar **Thunderbolt / USB-C** del Mac a `HDMI IN` de la unidad A.
+2. Conectar `HDMI OUT 1–4` a los cuatro paneles en retrato, de izquierda a derecha (A1–A4).
 3. Seleccionar mosaico `4×1` y rotación `90°`. Si los paneles quedan invertidos, usar `270°`.
 
 **Controlador B — muro horizontal (Ventana B, canales 4–7):**
 
-1. Conectar la segunda salida del Mac a `HDMI IN` de la unidad B.
-2. Conectar `HDMI OUT 1–4` a los cuatro paneles horizontales en el orden del mosaico: fila superior izquierda (OUT 1), fila superior derecha (OUT 2), fila inferior izquierda (OUT 3), fila inferior derecha (OUT 4).
+1. Conectar el **HDMI nativo del Mac** a `HDMI IN` de la unidad B.
+2. Conectar `HDMI OUT 1–4` a los cuatro paneles horizontales en el orden del mosaico: fila superior izquierda (OUT 1 / B1), fila superior derecha (OUT 2 / B2), fila inferior izquierda (OUT 3 / B3), fila inferior derecha (OUT 4 / B4).
 3. Seleccionar mosaico `2×2` y rotación `0°`.
 
 **Pasos comunes a ambas unidades:**
 
 4. Desactivar el mirroring de macOS y usar escritorio extendido (dos escritorios externos a 1920×1080 a 60 Hz).
-5. En la ControlApp pulsar **Configure Mixed Wall (Wall A + B)** para detectar automáticamente ambas salidas y guardar sus posiciones en `presentationWindows`. Reiniciar la aplicación.
+5. Arrancar la app: en `dualWindow8` coloca sola Thunderbolt = A y HDMI = B. Pulsar **Identify A / Identify B** para confirmar OUT1–4. **Configure Mixed Wall** solo si hay que forzar 1080p60; **Swap A/B** si los muros están cruzados (requiere reinicio).
 
-La ficha técnica limita los modos de mosaico con rotación a entrada 1920×1080; 3840×2160 a 30 Hz sólo es válido para modos sin esa rotación. El botón rechaza configuraciones donde macOS no exponga 1080p60 en ambos controladores.
+La ficha técnica limita los modos de mosaico con rotación a entrada 1920×1080; 3840×2160 a 30 Hz sólo es válido para modos sin esa rotación. **Configure Mixed Wall** rechaza configuraciones donde macOS no exponga 1080p60 en ambos controladores.
 
 El archivo `bin/data/settings.json` refleja la disposición activa en `videoWallController`:
 
 ```json
 "videoWallController": {
-    "wallA": { "layout": "4x1", "panelOrientation": "portrait",   "rotationDegrees": 90 },
-    "wallB": { "layout": "2x2", "panelOrientation": "landscape",  "rotationDegrees": 0  }
+    "wallA": { "connector": "thunderbolt", "layout": "4x1", "panelOrientation": "portrait",   "rotationDegrees": 90 },
+    "wallB": { "connector": "hdmi",        "layout": "2x2", "panelOrientation": "landscape",  "rotationDegrees": 0  }
 }
 ```
 
@@ -1033,7 +1133,7 @@ lentos. Los límites y la duración se ajustan en
 
 ![Mapa de conexiones de la instalación](img/mapa.png)
 
-El mapa corresponde al diseño de referencia del sistema. Una máquina con dos salidas HDMI hacia dos controladores ICUIXIAN; cada controlador distribuye cuatro segmentos a cuatro pantallas. ICUIXIAN A distribuye cuatro tiras de retrato (4×1, 90°); ICUIXIAN B distribuye cuatro pantallas horizontales en mosaico (2×2, 0°). El audio sale del Mac por Dante Virtual Soundcard hacia la unidad DANTE 5 del sistema Midas.
+El mapa corresponde al diseño de referencia del sistema. Una máquina con Thunderbolt hacia ICUIXIAN A y HDMI nativo hacia ICUIXIAN B; cada controlador distribuye cuatro segmentos a cuatro pantallas. ICUIXIAN A distribuye cuatro tiras de retrato (4×1, 90°); ICUIXIAN B distribuye cuatro pantallas horizontales en mosaico (2×2, 0°). El audio sale del Mac por Dante Virtual Soundcard hacia la unidad DANTE 5 del sistema Midas.
 
 | Color | Tipo de línea |
 |---|---|
@@ -1047,7 +1147,7 @@ El mapa corresponde al diseño de referencia del sistema. Una máquina con dos s
 |---|---|---|
 | 4 | Monitor / pantalla 1080×1920 (9:16, montaje en vertical) | Canales 0–3 (Muro A). Distribuidos por ICUIXIAN A en modo 4×1 con rotación 90° |
 | 4 | Monitor / pantalla 1920×1080 (16:9, montaje horizontal) | Canales 4–7 (Muro B). Distribuidos por ICUIXIAN B en modo 2×2 sin rotación |
-| 1 | Ordenador Mac arm64 con dos salidas HDMI independientes | Entrega dos señales 1920×1080 a 60 Hz y ejecuta ocho canales a 30 fps |
+| 1 | Ordenador Mac arm64 con Thunderbolt/USB-C + HDMI | Entrega dos señales 1920×1080 a 60 Hz y ejecuta ocho canales a 30 fps |
 | 1 | ICUIXIAN 0104-XZ (Muro A), ASIN B0DM98NVSH | Divide la entrada 1080p60 en cuatro tiras verticales de retrato |
 | 1 | ICUIXIAN 0104-XZ (Muro B), ASIN B0DM98NVSH | Divide la entrada 1080p60 en cuatro pantallas en mosaico 2×2 horizontal |
 | 1 | Consola / sistema de audio Midas con unidad DANTE 5 | Recibe 8 canales via DANTE desde el Mac y los enruta a los altavoces de sala |
@@ -1061,7 +1161,7 @@ Opcionales según sala: extensiones eléctricas, canaletas o cinta gaffer para e
 
 ### Descripción del setup
 
-**Reparto de vídeo.** La ventana A (canales 0–3) alimenta ICUIXIAN A configurado como 4×1 con rotación 90°; cada segmento de 480×1080 px se escala y rota al panel vertical correspondiente. La ventana B (canales 4–7) alimenta ICUIXIAN B configurado como 2×2; cada cuadrante de 960×540 px se escala al panel horizontal correspondiente. `presentationWindows` en `settings.json` ajusta posición y tamaño de cada ventana dentro del escritorio extendido.
+**Reparto de vídeo.** Thunderbolt alimenta la ventana A (canales 0–3) hacia ICUIXIAN A configurado como 4×1 con rotación 90°; cada segmento de 480×1080 px se escala y rota al panel vertical correspondiente. El HDMI nativo alimenta la ventana B (canales 4–7) hacia ICUIXIAN B configurado como 2×2; cada cuadrante de 960×540 px se escala al panel horizontal correspondiente. Al arrancar, la app lee la geometría viva de esas dos salidas. **Identify A/B** pinta posición y OUT en cada panel.
 
 **Reloj.** `GlobalDirector`, `VideoDirector` y `VisualComposer` viven en el mismo proceso. Las dos ventanas comparten contexto OpenGL y guard de fotograma, por lo que no necesitan sincronización de red.
 

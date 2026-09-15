@@ -440,6 +440,7 @@ void GraphicScore::renderWaveform() {
     if (energyHistory_.empty()) return;
 
     int n = (int)energyHistory_.size();
+    const bool landscape = w_ >= h_;
 
     ofColor c = params_.markColor;
     ofPushStyle();
@@ -447,17 +448,34 @@ void GraphicScore::renderWaveform() {
     ofSetLineWidth(1.f);
 
     for (int i = 0; i < n; i++) {
-        float y   = ofMap((float)i, 0.f, (float)n, 0.f, (float)h_);
-        float barW = energyHistory_[i] * (float)w_ * 4.f;
-        barW = ofClamp(barW, 0.f, (float)w_);
-        if (barW > 0.5f)
-            ofDrawLine(0, y, barW, y);
+        if (landscape) {
+            // En Wall B el tiempo recorre el eje horizontal y la amplitud el
+            // vertical. Así la onda conserva una composición apaisada.
+            const float x = ofMap((float)i, 0.f, (float)n, 0.f, (float)w_);
+            float barH = ofClamp(energyHistory_[i] * (float)h_ * 4.f,
+                                 0.f, (float)h_);
+            if (barH > 0.5f)
+                ofDrawLine(x, (float)h_, x, (float)h_ - barH);
+        } else {
+            const float y = ofMap((float)i, 0.f, (float)n, 0.f, (float)h_);
+            float barW = ofClamp(energyHistory_[i] * (float)w_ * 4.f,
+                                 0.f, (float)w_);
+            if (barW > 0.5f)
+                ofDrawLine(0, y, barW, y);
+        }
     }
 
-    for (int i = std::max(0, n - h_); i < n; i++) {
-        float y = (float)(i - (n - h_));
-        float x = (float)w_ - 1.f - energyHistory_[i] * 60.f;
-        ofDrawRectangle(x, y, 2, 2);
+    const int trailLength = landscape ? w_ : h_;
+    for (int i = std::max(0, n - trailLength); i < n; i++) {
+        if (landscape) {
+            const float x = (float)(i - (n - trailLength));
+            const float y = (float)h_ - 1.f - energyHistory_[i] * 60.f;
+            ofDrawRectangle(x, y, 2, 2);
+        } else {
+            const float y = (float)(i - (n - trailLength));
+            const float x = (float)w_ - 1.f - energyHistory_[i] * 60.f;
+            ofDrawRectangle(x, y, 2, 2);
+        }
     }
 
     ofPopStyle();
@@ -631,9 +649,11 @@ void GraphicScore::renderVideoNumbers(CVPipeline& cv) {
 
     glm::vec2 aScale = cv.getAnalysisScale();  // (4,4) instalación, (1,1) test
 
-    // Rejilla fija: 36 columnas × 64 filas a lo largo del FBO de visualización
-    const int nCols = 36;
-    const int nRows = 64;
+    // Mantener celdas y caracteres con proporciones equivalentes en ambos muros.
+    // Portrait: 36x64. Landscape: la misma rejilla rotada, 64x36.
+    const bool landscape = w_ >= h_;
+    const int nCols = landscape ? 64 : 36;
+    const int nRows = landscape ? 36 : 64;
     float cellW = (float)w_ / nCols;
     float cellH = (float)h_ / nRows;
 

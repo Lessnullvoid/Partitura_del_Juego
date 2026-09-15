@@ -2,6 +2,7 @@
 
 #include "ofMain.h"
 #include "VisualGenerator.h"
+#include "PresentationSafety.h"
 
 #include <array>
 #include <cstdint>
@@ -27,6 +28,16 @@ enum class InstallationMoment : std::uint8_t {
     PulseSystem = 0,
     BarScanSystem,
     Intercalation
+};
+
+// Modo de presentacion visual para un capitulo de contenido Video.
+// PointCloud:     nube de puntos 3D (VideoPointCloudGenerator).
+// Thermal:        nube de puntos 3D con paleta de color termico Ironbow.
+// ComputerVision: nube de puntos B&W + Ironbow en las areas de deteccion.
+enum class VideoDisplayMode : std::uint8_t {
+    PointCloud     = 0,
+    Thermal        = 1,
+    ComputerVision = 2
 };
 
 // Movimiento formal global inferido de los ocho flujos visuales/de datos. Son
@@ -92,6 +103,13 @@ struct VisualComposerParams {
     float barScanMomentDuration = 32.f;
     int maxVideoPerGroup = 2;
     float dualVideoProbability = 0.32f;
+    // Probabilidad de aplicar la paleta termica a la nube de puntos de video.
+    // Solo se aplica cuando vpcSettings_.enabled es true.
+    float thermalVideoProbability = 0.25f;
+    // Probabilidad de que un capitulo use nube de puntos ComputerVision
+    // (puntos B&W + Ironbow en areas de deteccion).
+    // El sorteo se aplica despues del sorteo termico: si no es termico, se evalua este.
+    float computerVisionVideoProbability = 0.25f;
     float takeoverIntervalMin = 45.f;
     float takeoverIntervalMax = 90.f;
     float takeoverDurationMin = 6.f;
@@ -156,6 +174,7 @@ struct ChapterState {
 
     bool videoRequested = false;
     bool videoPlaying = false;
+    VideoDisplayMode videoDisplayMode = VideoDisplayMode::PointCloud;
     std::uint32_t seed = 1u;
     std::uint64_t revision = 0;
 };
@@ -163,6 +182,7 @@ struct ChapterState {
 class VisualComposer {
 public:
     void setup(const VisualComposerParams& params = {}, int channelCount = 8);
+    void setPresentationSafety(PresentationSafety* safety) { safety_ = safety; }
     void update(float globalSpeed = 1.f);
 
     VisualComposerParams& params() { return params_; }
@@ -240,10 +260,13 @@ private:
                                   int generator) const;
     void ensureVideoReplacement(int departingChannel);
     ContentType chooseConstrainedContent(int channel);
+    bool videoAllowedOn(int channel) const;
+    void evacuateHiddenLandscapeVideo();
     static float clamp01(float value);
     static int groupFor(int channel);
 
     VisualComposerParams params_;
+    PresentationSafety* safety_ = nullptr;
     std::vector<ChapterState> states_;
     std::vector<std::deque<int>> histories_;
     std::vector<PendingGenerator> pendingGenerators_;

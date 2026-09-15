@@ -58,7 +58,7 @@ nube de puntos de vídeo por GPU y transmisión OSC.
 
 | Cant. | Equipo |
 |-------|--------|
-| 1 | Mac Apple Silicon (M1 o posterior) con **dos salidas HDMI independientes** |
+| 1 | Mac Apple Silicon (M1 o posterior) con **Thunderbolt/USB-C + HDMI** |
 | 4 | Pantallas 1080×1920 px (9:16) para montaje en retrato — Muro A |
 | 4 | Pantallas 1920×1080 px (16:9) para montaje horizontal — Muro B |
 | 1 | ICUIXIAN 0104-XZ (ASIN B0DM98NVSH) — Muro A |
@@ -198,21 +198,22 @@ reproducen vídeo y que la ControlApp muestra 48 clips disponibles.
 
 **Muro A — cuatro pantallas en retrato:**
 
-1. Conectar la primera salida HDMI del Mac a `HDMI IN` de ICUIXIAN A.
-2. Conectar `HDMI OUT 1` → pantalla izquierda (canal 0).
-3. Conectar `HDMI OUT 2` → segunda pantalla (canal 1).
-4. Conectar `HDMI OUT 3` → tercera pantalla (canal 2).
-5. Conectar `HDMI OUT 4` → pantalla derecha (canal 3).
+1. Conectar **Thunderbolt / USB-C** del Mac a `HDMI IN` de ICUIXIAN A
+   (adaptador USB-C a HDMI si hace falta).
+2. Conectar `HDMI OUT 1` → pantalla izquierda (canal 0, etiqueta **A1**).
+3. Conectar `HDMI OUT 2` → segunda pantalla (canal 1, **A2**).
+4. Conectar `HDMI OUT 3` → tercera pantalla (canal 2, **A3**).
+5. Conectar `HDMI OUT 4` → pantalla derecha (canal 3, **A4**).
 6. En ICUIXIAN A: seleccionar mosaico **4×1** y rotación **90°**.
    Si las imágenes quedan invertidas, usar **270°**.
 
 **Muro B — cuatro pantallas horizontales:**
 
-1. Conectar la segunda salida HDMI del Mac a `HDMI IN` de ICUIXIAN B.
-2. Conectar `HDMI OUT 1` → pantalla superior izquierda (canal 4).
-3. Conectar `HDMI OUT 2` → pantalla superior derecha (canal 5).
-4. Conectar `HDMI OUT 3` → pantalla inferior izquierda (canal 6).
-5. Conectar `HDMI OUT 4` → pantalla inferior derecha (canal 7).
+1. Conectar el **HDMI nativo del Mac** a `HDMI IN` de ICUIXIAN B.
+2. Conectar `HDMI OUT 1` → pantalla superior izquierda (canal 4, **B1**).
+3. Conectar `HDMI OUT 2` → pantalla superior derecha (canal 5, **B2**).
+4. Conectar `HDMI OUT 3` → pantalla inferior izquierda (canal 6, **B3**).
+5. Conectar `HDMI OUT 4` → pantalla inferior derecha (canal 7, **B4**).
 6. En ICUIXIAN B: seleccionar mosaico **2×2** y rotación **0°**.
 
 ### 5.2 Configuración desde macOS
@@ -222,29 +223,35 @@ reproducen vídeo y que la ControlApp muestra 48 clips disponibles.
    unidades ICUIXIAN como pantallas externas independientes.
 3. Las dos pantallas externas deben aparecer a **1920×1080 a 60 Hz**.
 
-### 5.3 Configuración desde la ControlApp
+### 5.3 Arranque automático y ControlApp
+
+Con las dos salidas externas a 1920×1080, la app **coloca sola** las ventanas
+de presentación al arrancar: Thunderbolt = Muro A (4×1, 90°), HDMI = Muro B
+(2×2, 0°). Si no puede distinguir los conectores, usa izquierda = A y
+derecha = B.
 
 1. Abrir la app. Tecla `U` si la ControlApp no es visible.
-2. En el panel lateral, pulsar **Configure Mixed Wall (4V + 2x2H)**.
-   - La app detecta automáticamente las dos salidas externas a 1080p60.
-   - Cambia ambas a 1920×1080 a 60 Hz y guarda sus posiciones en `settings.json`.
-   - Muestra un resumen de la configuración guardada para Muro A y Muro B.
-3. **Reiniciar la aplicación** para que los cambios de posición de ventana
-   tengan efecto.
+2. Comprobar las líneas **WALL A** / **WALL B** (conector, layout, rotación,
+   canales, `x,y`).
+3. Pulsar **Identify A**, **Identify B** o **Identify both** para pintar en
+   cada panel la letra del muro, el número de posición 1–4, el canal y `OUT n`.
+   El overlay se apaga solo a los 30 s. Si el número del Muro A aparece
+   boca abajo, cambiar la rotación ICUIXIAN de 90° a 270°.
+4. Si A y B están intercambiados, pulsar **Swap A/B** y **reiniciar**.
+5. **Configure Mixed Wall (4V + 2x2H)** fuerza 1080p60 y vuelve a guardar
+   el par mixto. Usarlo si un adaptador no arranca a 1080p. Después,
+   **reiniciar**.
 
-> Si solo se usan pantallas en retrato (sin mosaico 2×2), usar el botón
+> Si solo se usan pantallas en retrato (sin mosaico 2×2), usar
 > **Configure ICUIXIAN outputs (4V + 4V)** en su lugar.
 
 ### 5.4 Verificar el orden de canales
 
-Después de reiniciar con la configuración guardada, en la ControlApp →
-pestaña **Overview**: el canal 0 debe estar en la posición física más a la
-izquierda del Muro A y el canal 7 en la posición más a la derecha del Muro B
-(o inferior derecha en el mosaico 2×2).
+Con **Identify A** activo, A1 debe ser el panel izquierdo del Muro A y A4 el
+derecho. Con **Identify B**, B1 es superior izquierda y B4 inferior derecha.
 
-Si el orden no coincide, ajustar manualmente las posiciones de ventana en
-`~/Library/Application Support/PartituraDelJuego/settings.json` bajo
-`"presentationWindows"`.
+Si el orden no coincide, revisar los cables `HDMI OUT 1–4` del ICUIXIAN, o
+usar **Swap A/B** si los dos muros están cruzados.
 
 ---
 
@@ -386,8 +393,11 @@ Siempre visible en la franja izquierda:
 | Campo **OSC port** | Puerto de envío OSC (por defecto 9001) |
 | **Total clips** | Número de clips cargados en el pool |
 | **Configure ICUIXIAN outputs (4V + 4V)** | Detecta dos salidas externas 1080p60 y guarda ambas como muro de retratos 4×1 con rotación 90° |
-| **Configure Mixed Wall (4V + 2x2H)** | Detecta dos salidas externas: Muro A como 4×1 retrato (90°), Muro B como 2×2 horizontal (0°) |
-| Resumen Wall A / Wall B | Muestra la configuración guardada activa |
+| **Configure Mixed Wall (4V + 2x2H)** | Fuerza 1080p60 y guarda Thunderbolt = Muro A 4×1/90°, HDMI = Muro B 2×2/0° |
+| **Swap A/B** | Intercambia las dos ventanas y sus metadatos; requiere reinicio |
+| **Identify A / B / both** | Pinta en cada panel la letra del muro, posición 1–4, canal y OUT; se apaga a los 30 s |
+| **Hide H-wall video** | Seguridad: apaga el vídeo en el muro apaisado (2×2). El muro de retratos sigue. Los generadores del muro horizontal siguen visibles. No se guarda al reiniciar |
+| Resumen Wall A / Wall B | Conector, layout, rotación ICUIXIAN, canales y geometría de escritorio |
 
 Después de pulsar cualquier botón de configuración, **reiniciar la aplicación**.
 
@@ -729,9 +739,9 @@ eventos de borrado— producen discontinuidades audibles equivalentes.
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| Las ventanas de presentación no aparecen en las pantallas correctas | Posiciones de ventana desactualizadas | Pulsar **Configure Mixed Wall** en la ControlApp y reiniciar |
-| Una ventana aparece en la pantalla integrada del Mac | ICUIXIAN no detectado o no a 1080p60 | Verificar conexión HDMI y modo de pantalla en Preferencias del Sistema |
-| Imagen girada o invertida en el Muro A | Rotación incorrecta en ICUIXIAN A | Cambiar rotación de 90° a 270° en ICUIXIAN A |
+| Las ventanas de presentación no aparecen en las pantallas correctas | Posiciones de ventana desactualizadas o conectores cruzados | Pulsar **Identify both**; si A/B están cruzados, **Swap A/B** y reiniciar; si hace falta, **Configure Mixed Wall** |
+| Una ventana aparece en la pantalla integrada del Mac | ICUIXIAN no detectado o no a 1080p60 | Verificar Thunderbolt + HDMI y modo 1920×1080 a 60 Hz |
+| Números Identify del Muro A boca abajo | Rotación 90° vs 270° en ICUIXIAN A | Cambiar rotación de 90° a 270° en ICUIXIAN A |
 | Los ocho canales muestran negro | VideoDirector desactivado o clips no encontrados | Verificar la carpeta de clips; activar VideoDirector en la página Video Director |
 | Un canal muestra negro constante | Clip no encontrado o canal pausado | En Overview: pulsar **Next** en ese canal |
 | Los modos no rotan | Modo forzado activo | En Channel Editor → SCORE → Mode: seleccionar **Auto** |
@@ -868,8 +878,9 @@ paquete sea autónomo:
 | `clips.horizontalFolder` | `horizontal` | `../../../../Videos/Horizontal` |
 | `presentationFullscreen` | `true` | `false` |
 
-El usuario final reconfigura `outputMode` a `dualWindow8` desde la ControlApp
-(botón **Configure Mixed Wall**) al instalar en el espacio físico.
+El usuario final instala con Thunderbolt → ICUIXIAN A y HDMI → ICUIXIAN B.
+En `dualWindow8` las ventanas se colocan solas al arrancar. **Configure Mixed
+Wall** queda como recuperación si hay que forzar 1080p60.
 
 ### Publicar el paquete como GitHub Release
 

@@ -6,6 +6,7 @@
 #include "GlobalDirector.h"
 #include "VideoDirector.h"
 #include "PerformanceMonitor.h"
+#include "WallIdentify.h"
 #include <array>
 
 // App de presentación para una salida de controlador: renderiza cuatro canales
@@ -29,13 +30,16 @@ public:
                     VisualComposer* composer = nullptr,
                     PerformanceMonitor* performance = nullptr,
                     int performanceWindow = 0, int targetFps = 30,
-                    WallLayout layout = WallLayout::Strips4x1);
+                    WallLayout layout = WallLayout::Strips4x1,
+                    WallIdentifyState* identify = nullptr);
 
     void setup()  override;
     void update() override;
     void draw()   override;
 
 private:
+    void drawIdentifyOverlay();
+    void drawIdentifyCard(int x, int y, int w, int h, int slice);
     std::array<Channel*, kSegments> channels_;
     int             channelOffset_;
     int             totalW_, totalH_, segW_, segH_;
@@ -49,4 +53,5 @@ private:
     PerformanceMonitor* performance_;
     int performanceWindow_;
     int targetFps_;
+    WallIdentifyState* identify_ = nullptr;
 };

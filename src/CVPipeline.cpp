@@ -106,6 +106,7 @@ void CVPipeline::update(ofPixels& grayPixels) {
         b.area = (float)contourFinder_.getContourArea(i);
         b.bbW  = (float)bb.width  * scaleX;
         b.bbH  = (float)bb.height * scaleY;
+        b.label = contourFinder_.getLabel(i);
         data_.blobs.push_back(b);
     }
 

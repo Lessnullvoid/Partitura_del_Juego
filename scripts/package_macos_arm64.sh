@@ -2,7 +2,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NAME="Partitura_del_Juego-macOS-arm64"
+VERSION="${1:-${PDJ_VERSION:-$(date -u '+%Y.%m.%d-%H%M')}}"
+if ! [[ "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+    echo "error: invalid version '$VERSION'" >&2
+    echo "use only letters, numbers, dots, underscores, and hyphens" >&2
+    exit 1
+fi
+NAME="Partitura_del_Juego-v${VERSION}-macOS-arm64"
 SOURCE_APP="$ROOT/bin/Partitura_del_Juego.app"
 DIST_DIR="$ROOT/dist"
 STAGE_DIR="$DIST_DIR/$NAME"
@@ -46,6 +52,11 @@ echo "Staging portable bundle..."
 rm -rf "$STAGE_DIR" "$ZIP" "$CHECKSUM"
 mkdir -p "$STAGE_DIR" "$DATA" "$VIDEOS" "$STAGE_DIR/SuperCollider"
 ditto "$SOURCE_APP" "$APP"
+{
+    echo "version=$VERSION"
+    echo "built_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "git_commit=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+} > "$STAGE_DIR/VERSION.txt"
 
 # Mantener los medios mutables fuera de la aplicación firmada. Las rutas relativas de
 # settings.json siguen funcionando cuando se mueve la carpeta completa del paquete.
@@ -107,42 +118,223 @@ if test -z "$SCLANG"; then
     exit 1
 fi
 
-# --------------------------------------------------------------------------
-# Pre-flight: scan audio devices and report DANTE status before launching SC
-# --------------------------------------------------------------------------
 echo ""
 echo "============================================================"
 echo "  Partitura del Juego  |  Audio Launcher"
 echo "============================================================"
 echo ""
-echo "Scanning system audio devices..."
-if system_profiler SPAudioDataType 2>/dev/null \
-        | grep -qi "dante\|virtual soundcard"; then
-    DANTE_STATUS="YES — Dante Virtual Soundcard found in system audio"
-else
-    DANTE_STATUS="NO  — Dante Virtual Soundcard not found (stereo fallback)"
-fi
-echo "  DANTE device : $DANTE_STATUS"
 
-# Show raw device list from system_profiler (device names only, trimmed)
-echo "  Devices listed by macOS:"
-system_profiler SPAudioDataType 2>/dev/null \
-    | awk -F': ' '/^\s+[A-Z].*:$/ { gsub(/^[ \t]+|[ \t]+$/, "", $1); print "    " $1 }' \
-    | grep -iv "Audio Devices\|coreaudio\|^$" \
-    | head -12 || echo "    (could not read device list)"
+# --------------------------------------------------------------------------
+# Step 1: scan and classify audio devices
+# Outputs shell variables: SCAN_MODE, SCAN_DANTE, SCAN_REAL_LIST, SCAN_BUILTIN
+# --------------------------------------------------------------------------
+echo "[ Scanning audio devices ]"
+
+eval "$(python3 - <<'PY'
+import subprocess, json, sys
+
+BUILTIN_KW  = {"built-in","built in","macbook","imac","mac mini","mac pro",
+               "mac studio","microphone","aggregate","multi-output","blackhole"}
+DANTE_KW    = {"dante","dvs","virtual soundcard"}
+VIRTUAL_KW  = {"ndi","iriun","zoom","webcam","loopback","soundflower",
+               "teams","discord","airplay"}
+
+def classify(name):
+    lo = name.lower()
+    if any(k in lo for k in DANTE_KW):    return "dante"
+    if any(k in lo for k in BUILTIN_KW):  return "builtin"
+    if any(k in lo for k in VIRTUAL_KW):  return "virtual"
+    return "real"
+
+try:
+    out = subprocess.run(["system_profiler","SPAudioDataType","-json"],
+                         capture_output=True, text=True, timeout=8).stdout
+    items = []
+    for section in json.loads(out).get("SPAudioDataType",[]):
+        items.extend(section.get("_items",[]))
+except Exception:
+    try:
+        out = subprocess.run(["system_profiler","SPAudioDataType"],
+                             capture_output=True, text=True, timeout=8).stdout
+        items = [{"_name": l.strip().rstrip(":")}
+                 for l in out.splitlines()
+                 if l.startswith("        ") and l.rstrip().endswith(":")]
+    except Exception:
+        print("SCAN_MODE=builtin"); print("SCAN_DANTE="); print("SCAN_REAL_LIST="); print("SCAN_BUILTIN=")
+        sys.exit(0)
+
+for d in items:
+    n = d.get("_name","?")
+    t = classify(n)
+    if   t == "dante":   lab = "[DANTE]   "
+    elif t == "builtin": lab = "[built-in]"
+    elif t == "virtual": lab = "[virtual] "
+    else:                lab = "[real]    "
+    sys.stderr.write("  " + lab + "  " + n + "\n")
+
+dante   = next((d["_name"] for d in items if classify(d["_name"])=="dante"),  None)
+reals   = [d["_name"] for d in items if classify(d["_name"])=="real"]
+builtin = next((d["_name"] for d in items if classify(d["_name"])=="builtin" and "speaker" in d["_name"].lower()), None)
+if builtin is None:
+    builtin = next((d["_name"] for d in items if classify(d["_name"])=="builtin"), None)
+
+mode = "dante" if dante else ("real" if reals else "builtin")
+
+def sq(s): return s.replace("'", "'\\''") if s else ""
+
+real_list = "|".join(sq(r) for r in reals)
+
+sys.stderr.write("\n")
+print(f"SCAN_MODE='{mode}'")
+print(f"SCAN_DANTE='{sq(dante or '')}'")
+print(f"SCAN_REAL_LIST='{real_list}'")
+print(f"SCAN_BUILTIN='{sq(builtin or '')}'")
+PY
+)"
+
 echo ""
 
-# Check Dante Virtual Soundcard app installation
-if test -d "/Applications/Dante Virtual Soundcard.app" \
-        || test -d "$HOME/Applications/Dante Virtual Soundcard.app"; then
-    echo "  DVS app      : installed"
+# --------------------------------------------------------------------------
+# Step 2: device selection
+# DANTE -> automatic.  Otherwise -> interactive picker.
+# Result exported as PDJ_AUDIO_DEVICE (empty = built-in default)
+# --------------------------------------------------------------------------
+export PDJ_AUDIO_DEVICE=""
+export PDJ_AUDIO_CHANNELS=2
+
+if [ "$SCAN_MODE" = "dante" ]; then
+    echo "  DANTE detected: $SCAN_DANTE"
+    echo "  Routing: 8-channel @ 48 kHz -> AmpCrown"
+    PDJ_AUDIO_DEVICE="$SCAN_DANTE"
+    PDJ_AUDIO_CHANNELS=8
 else
-    echo "  DVS app      : NOT found in Applications"
-    echo "                 Download from https://www.audinate.com/products/software/dante-virtual-soundcard"
+    IFS='|' read -ra REAL_DEVS <<< "$SCAN_REAL_LIST"
+    MENU_ITEMS=()
+    for dev in "${REAL_DEVS[@]}"; do
+        [ -n "$dev" ] && MENU_ITEMS+=("$dev")
+    done
+    [ -n "$SCAN_BUILTIN" ] && MENU_ITEMS+=("${SCAN_BUILTIN} (built-in)")
+
+    if [ ${#MENU_ITEMS[@]} -eq 0 ]; then
+        echo "  No external audio device found."
+        echo "  Using macOS default output (built-in speakers)."
+    else
+        echo "  No DANTE detected. Select audio output:"
+        echo ""
+        DEFAULT_IDX=0
+        for i in "${!MENU_ITEMS[@]}"; do
+            LABEL="${MENU_ITEMS[$i]}"
+            MARKER=""
+            [ "$i" -eq "$DEFAULT_IDX" ] && MARKER=" (default)"
+            echo "    $((i+1)))  $LABEL$MARKER"
+        done
+        echo ""
+        read -r -p "  Enter number [1-${#MENU_ITEMS[@]}] or Enter for default: " SELECTION
+        echo ""
+
+        if [ -z "$SELECTION" ]; then
+            SELECTION=1
+        fi
+
+        if ! [[ "$SELECTION" =~ ^[0-9]+$ ]] || \
+           [ "$SELECTION" -lt 1 ] || \
+           [ "$SELECTION" -gt "${#MENU_ITEMS[@]}" ]; then
+            echo "  Invalid choice -- using default."
+            SELECTION=1
+        fi
+
+        CHOSEN="${MENU_ITEMS[$((SELECTION-1))]}"
+
+        if [[ "$CHOSEN" == *" (built-in)" ]]; then
+            PDJ_AUDIO_DEVICE=""
+        else
+            PDJ_AUDIO_DEVICE="$CHOSEN"
+        fi
+
+        if [ -z "$PDJ_AUDIO_DEVICE" ]; then
+            echo "  Selected: built-in speakers (macOS default output)"
+        else
+            echo "  Selected: $PDJ_AUDIO_DEVICE"
+        fi
+    fi
+    echo ""
 fi
-echo ""
-echo "Starting the audio engine. Leave this window open."
-echo "Press Ctrl+C here to stop audio."
+
+# --------------------------------------------------------------------------
+# Step 3: OS-level audio confirmation
+# afplay uses whatever macOS has as the system output device. When DVS is
+# active that means the ping travels the full DANTE path to the amps, which
+# is exactly what we want to verify. A background watchdog kills afplay
+# after 6 seconds so it can never hang the launcher.
+# --------------------------------------------------------------------------
+afplay_safe() {
+    afplay "$1" &
+    local pid=$!
+    ( sleep 6 && kill "$pid" 2>/dev/null ) &
+    local dog=$!
+    wait "$pid" 2>/dev/null || true
+    kill "$dog" 2>/dev/null || true
+    wait "$dog" 2>/dev/null || true
+}
+
+PING_SOUND=""
+for candidate in \
+    "/System/Library/Sounds/Ping.aiff" \
+    "/System/Library/Sounds/Tink.aiff" \
+    "/System/Library/Sounds/Pop.aiff"
+do
+    if test -f "$candidate"; then
+        PING_SOUND="$candidate"
+        break
+    fi
+done
+
+if [ -n "$PING_SOUND" ]; then
+    echo "[ OS audio test ]"
+    if [ "$SCAN_MODE" = "dante" ]; then
+        echo "  Playing a system ping through DANTE -> AmpCrown speakers..."
+        echo "  (if DVS is the macOS output device you should hear it on the amps)"
+    else
+        echo "  Playing a system ping to confirm macOS audio routing..."
+    fi
+    echo ""
+    afplay_safe "$PING_SOUND"
+    sleep 0.3
+    afplay_safe "$PING_SOUND"
+    echo ""
+    read -r -p "  Did you hear the ping? [y/n] then Enter: " HEARD
+    echo ""
+    if [[ "$HEARD" =~ ^[Nn] ]]; then
+        if [ "$SCAN_MODE" = "dante" ]; then
+            echo "  ** Ping not heard through DANTE. Check:"
+            echo "     1. Dante Virtual Soundcard is set as macOS output"
+            echo "        (System Settings -> Sound -> Output -> Dante Virtual Soundcard)"
+            echo "     2. DVS is enabled (green icon in the menu bar)"
+            echo "     3. Dante Controller shows green signal on AmpCrown receive channels"
+            echo "     4. AmpCrown amplifiers are powered on and not muted"
+        else
+            echo "  ** Audio not confirmed. Troubleshooting steps:"
+            echo "     1. Open System Settings -> Sound -> Output"
+            echo "        and confirm the correct device is selected."
+            echo "     2. Make sure the Mac volume is not muted (press F12)."
+            echo "     3. If using an external interface, check it is powered"
+            echo "        on and set as the output in System Settings."
+        fi
+        echo ""
+        read -r -p "  Press Enter to continue anyway, or Ctrl+C to quit: "
+        echo ""
+    else
+        echo "  Audio confirmed. Continuing..."
+        echo ""
+    fi
+fi
+
+# --------------------------------------------------------------------------
+# Step 4: launch SC engine -- PDJ_AUDIO_DEVICE and PDJ_AUDIO_CHANNELS are
+# exported so pdj_audio_config.scd can read them with .getenv
+# --------------------------------------------------------------------------
+echo "[ Starting SuperCollider engine ]"
+echo "  Leave this window open.  Press Ctrl+C to stop."
 echo ""
 
 exec "$SCLANG" "$LAUNCHER"
@@ -162,39 +354,96 @@ echo "  Partitura del Juego  |  Audio Status Check"
 echo "============================================================"
 echo ""
 
-# macOS audio device list via system_profiler
-echo "[ System audio devices ]"
-system_profiler SPAudioDataType 2>/dev/null \
-    | awk -F': ' '/^\s+[A-Z].*:$/ { gsub(/^[ \t]+|[ \t]+$/, "", $1); print "  " $1 }' \
-    | grep -iv "Audio Devices\|coreaudio\|^$" \
-    | head -20 || echo "  (could not read device list)"
+python3 - <<'PY'
+import subprocess, json, sys
+
+BUILTIN_KEYWORDS = {
+    "built-in", "built in", "macbook", "imac", "mac mini",
+    "mac pro", "mac studio", "microphone", "aggregate",
+    "multi-output", "blackhole"
+}
+DANTE_KEYWORDS = {"dante", "dvs", "virtual soundcard"}
+
+def classify(name):
+    lo = name.lower()
+    if any(k in lo for k in DANTE_KEYWORDS):
+        return "dante"
+    if any(k in lo for k in BUILTIN_KEYWORDS):
+        return "builtin"
+    return "external"
+
+try:
+    out = subprocess.run(
+        ["system_profiler", "SPAudioDataType", "-json"],
+        capture_output=True, text=True, timeout=8
+    ).stdout
+    items = []
+    for section in json.loads(out).get("SPAudioDataType", []):
+        items.extend(section.get("_items", []))
+except Exception:
+    try:
+        out = subprocess.run(
+            ["system_profiler", "SPAudioDataType"],
+            capture_output=True, text=True, timeout=8
+        ).stdout
+        items = [
+            {"_name": line.strip().rstrip(":")}
+            for line in out.splitlines()
+            if line.startswith("        ") and line.rstrip().endswith(":")
+            and not line.strip().startswith("#")
+        ]
+    except Exception as e:
+        print(f"  [!] Could not read audio devices: {e}")
+        items = []
+
+dante    = next((d["_name"] for d in items if classify(d.get("_name","")) == "dante"),    None)
+external = next((d["_name"] for d in items if classify(d.get("_name","")) == "external"), None)
+
+print("[ Audio device scan ]")
+for d in items:
+    name = d.get("_name", "?")
+    tag  = classify(name)
+    marker = {"dante": "[DANTE]   ", "external": "[external]", "builtin": "[built-in]"}.get(tag, "[?]       ")
+    print(f"  {marker}  {name}")
+
+print()
+print("[ Audio mode when SuperCollider starts ]")
+if dante:
+    print(f"  Mode    : 8-channel DANTE")
+    print(f"  Device  : {dante}")
+    print( "  Action  : none needed — DANTE is ready")
+elif external:
+    print(f"  Mode    : stereo — external device")
+    print(f"  Device  : {external}")
+    print( "  Note    : for 8-channel DANTE, install + enable DVS and connect Ethernet")
+else:
+    print( "  Mode    : stereo — built-in speakers")
+    print( "  Device  : none connected  (Mac internal speakers will be used)")
+    print()
+    print( "  To enable DANTE (8ch / Sala Abierta):")
+    print( "    1. Install + license Dante Virtual Soundcard (audinate.com, ~USD 30)")
+    print( "    2. Open the DVS menu-bar app")
+    print( "       Set TX=8  RX=2  48000 Hz  1ms latency — click Enable")
+    print( "    3. Connect Ethernet to the same switch as the DANTE 5 unit")
+    print( "    4. Open Dante Controller — route DVS Out 1-8 to D3-1 through D3-8")
+    print( "       Set DANTE 5 as Clock Master — confirm green lock icon")
+    print( "    5. Run this check again to confirm, then Start Audio.command")
+    print()
+    print( "  To use a stereo USB/Thunderbolt interface instead:")
+    print( "    Connect the interface before launching Start Audio.command.")
+    print( "    The engine selects any non-built-in device automatically.")
+PY
+
 echo ""
 
-# DANTE / DVS detection
-echo "[ DANTE detection ]"
-if system_profiler SPAudioDataType 2>/dev/null \
-        | grep -qi "dante\|virtual soundcard"; then
-    echo "  DANTE Virtual Soundcard : DETECTED"
-    echo "  Mode when SC starts     : 8 channels / 48 kHz"
-else
-    echo "  DANTE Virtual Soundcard : NOT FOUND"
-    echo "  Mode when SC starts     : stereo fallback (2 ch)"
-    echo ""
-    echo "  To enable DANTE:"
-    echo "  1. Install Dante Virtual Soundcard from audinate.com (license required)"
-    echo "  2. Open the DVS menu-bar app, set TX=8 RX=2 48kHz, click Enable"
-    echo "  3. Connect the Mac to the same Ethernet switch as the DANTE 5 unit"
-    echo "  4. In Dante Controller, route DVS Out 1-8 to D3-1 through D3-8"
-fi
-echo ""
-
-# DVS app installation
-echo "[ DVS app ]"
+# DVS app
+echo "[ Dante Virtual Soundcard app ]"
 if test -d "/Applications/Dante Virtual Soundcard.app" \
         || test -d "$HOME/Applications/Dante Virtual Soundcard.app"; then
-    echo "  Installed : YES"
+    echo "  Status : installed"
 else
-    echo "  Installed : NO — download from https://www.audinate.com"
+    echo "  Status : NOT installed"
+    echo "  Get it : https://www.audinate.com/products/software/dante-virtual-soundcard"
 fi
 echo ""
 
@@ -202,35 +451,36 @@ echo ""
 echo "[ Dante Controller app ]"
 if test -d "/Applications/Dante Controller.app" \
         || test -d "$HOME/Applications/Dante Controller.app"; then
-    echo "  Installed : YES"
+    echo "  Status : installed"
 else
-    echo "  Installed : NO — download free from https://www.audinate.com"
+    echo "  Status : NOT installed (free)"
+    echo "  Get it : https://www.audinate.com/products/software/dante-controller"
 fi
 echo ""
 
-# Network check: look for an Ethernet interface with an IP
-echo "[ Network ]"
-if networksetup -listallhardwareports 2>/dev/null \
-        | grep -A2 "Ethernet\|Thunderbolt" \
-        | grep -q "en[0-9]"; then
-    # Try to find the IP of the first wired Ethernet interface
-    ETH_IF=$(networksetup -listallhardwareports 2>/dev/null \
-        | awk '/Ethernet|Thunderbolt/{getline; print $2; exit}')
-    if test -n "$ETH_IF"; then
-        ETH_IP=$(ipconfig getifaddr "$ETH_IF" 2>/dev/null || echo "")
-        if test -n "$ETH_IP"; then
-            echo "  Ethernet ($ETH_IF) : $ETH_IP"
+# Ethernet / network
+echo "[ Network (Ethernet required for DANTE) ]"
+ETH_FOUND=0
+while IFS= read -r line; do
+    if [[ "$line" =~ ^Hardware\ Port:.*[Ee]thernet|^Hardware\ Port:.*[Tt]hunderbolt ]]; then
+        read -r devline
+        IF=$(echo "$devline" | awk '{print $2}')
+        IP=$(ipconfig getifaddr "$IF" 2>/dev/null || echo "")
+        if [ -n "$IP" ]; then
+            echo "  $IF : $IP  (connected)"
         else
-            echo "  Ethernet ($ETH_IF) : no IP address — cable connected?"
+            echo "  $IF : no IP address (cable plugged in?)"
         fi
+        ETH_FOUND=1
     fi
-else
-    echo "  No Ethernet interface found — DANTE requires a wired connection"
+done < <(networksetup -listallhardwareports 2>/dev/null)
+if [ "$ETH_FOUND" -eq 0 ]; then
+    echo "  No Ethernet adapter found — DANTE requires a wired connection"
 fi
 echo ""
 
 echo "============================================================"
-echo "Run 'Start Audio.command' to start the audio engine."
+echo "Run 'Start Audio.command' to launch the audio engine."
 echo "============================================================"
 echo ""
 read -r -p "Press Return to close."
@@ -284,6 +534,8 @@ validate_package() {
         || fail "SuperCollider engine is missing"
     test -f "$package_root/SuperCollider/pdj_mode_voices.scd" \
         || fail "SuperCollider mode voices are missing"
+    test -f "$package_root/VERSION.txt" \
+        || fail "release version metadata is missing"
     test -x "$package_root/Start Audio.command" \
         || fail "Start Audio.command is missing or not executable"
     test -x "$package_root/Check Audio.command" \

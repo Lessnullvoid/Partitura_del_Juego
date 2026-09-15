@@ -15,6 +15,10 @@ uniform float luminanceFloor;
 uniform float luminanceCeiling;
 uniform float gammaVal;
 uniform float colorGain;
+uniform int colorMode;
+uniform vec4 cvBlobs[8];
+uniform int cvBlobCount;
+uniform float cvPadding;
 uniform float opacity;
 uniform float zInvert;
 uniform float xyScale;
@@ -37,6 +41,24 @@ float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32 + transitionSeed);
     return fract(p.x * p.y);
+}
+
+vec3 ironbow(float t) {
+    t = clamp(t, 0.0, 1.0);
+    const vec3 c0 = vec3(0.000, 0.000, 0.000);
+    const vec3 c1 = vec3(0.110, 0.040, 0.320);
+    const vec3 c2 = vec3(0.520, 0.022, 0.190);
+    const vec3 c3 = vec3(0.920, 0.215, 0.020);
+    const vec3 c4 = vec3(1.000, 0.840, 0.060);
+    const vec3 c5 = vec3(1.000, 1.000, 1.000);
+    float s = t * 5.0;
+    int i = int(s);
+    float f = fract(s);
+    if (i == 0) return mix(c0, c1, f);
+    if (i == 1) return mix(c1, c2, f);
+    if (i == 2) return mix(c2, c3, f);
+    if (i == 3) return mix(c3, c4, f);
+    return mix(c4, c5, f);
 }
 
 void main() {
@@ -88,7 +110,24 @@ void main() {
     alpha *= transitionVisible;
     gl_Position = modelViewProjectionMatrix * vec4(p, 1.0);
     gl_PointSize = pointSize * (0.55 + luminance * 1.25);
-    // La instalación es estrictamente monocroma: los puntos transportan solo la
-    // luminancia del vídeo, nunca su croma.
-    pointColor = vec4(vec3(grey), alpha);
+    float thermalValue = clamp(
+        (grey - luminanceFloor) /
+        max(0.0001, luminanceCeiling - luminanceFloor),
+        0.0, 1.0);
+    bool inDetection = false;
+    if (colorMode == 2) {
+        for (int i = 0; i < 8; ++i) {
+            if (i >= cvBlobCount) break;
+            vec4 blob = cvBlobs[i];
+            vec2 halfSize = blob.zw + vec2(cvPadding);
+            if (all(lessThan(abs(texcoord - blob.xy), halfSize))) {
+                inDetection = true;
+                break;
+            }
+        }
+    }
+    vec3 displayColor = vec3(grey);
+    if (colorMode == 1 || inDetection)
+        displayColor = ironbow(thermalValue);
+    pointColor = vec4(displayColor, alpha);
 }

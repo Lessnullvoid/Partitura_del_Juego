@@ -12,6 +12,7 @@
 #include "VideoPointCloudGenerator.h"
 #include "pdjv/PdjvOptionalBridge.h"
 #include "PerformanceMonitor.h"
+#include "PresentationSafety.h"
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -39,6 +40,9 @@ public:
     void draw();
     void drawInRegion(int x, int y, int segW, int segH);
 
+    void setPresentationSafety(PresentationSafety* safety) { safety_ = safety; }
+    bool landscapeVideoHidden() const;
+
     void loadNextClip();
     void play();
     void pause();
@@ -49,6 +53,8 @@ public:
     bool        isPlaying()      const;
     std::string getCurrentClip() const { return currentClip_; }
     int         getIdx()         const { return idx_; }
+    int         canvasW()        const { return w_; }
+    int         canvasH()        const { return h_; }
     float       getUpdateMilliseconds() const { return updateMilliseconds_; }
 
     CVPipeline&    getCVPipeline()  { return cv_; }
@@ -89,9 +95,12 @@ private:
     void populateVpcOsc(CVData& data) const;
     VideoGeneratorContext buildVideoGeneratorContext() const;
     void drawVideoPointCloud(int x, int y, int segW, int segH);
+    void drawComputerVisionValues(int x, int y, int segW, int segH) const;
     // isVpc: si es true, se suprime la superposición de inversión del generador
     // del compositor para que los fotogramas VideoPointCloud no se vean afectados por el evento invert.
     void applyPolarity(int x, int y, int segW, int segH, bool isVpc = false) const;
+    bool drawLandscapeVideoBlocked() const;
+    void fillRegionBlack(int x, int y, int w, int h) const;
 
     // Procesamiento CV fuera de hilo. Recoge píxeles publicados por el hilo principal,
     // llama a cv_.update() y publica el resultado.
@@ -100,6 +109,9 @@ private:
     void resetCvAsync();
 
     int           idx_ = 0, w_ = 0, h_ = 0;
+    // El análisis CV conserva la orientación del canal: portrait 270x480,
+    // landscape 480x270. Evita comprimir Wall B dentro de un buffer vertical.
+    int           cvW_ = 270, cvH_ = 480;
     std::string   currentClip_;
     float         baseSpeed_ = 1.0f;
     int           oscFrameSequence_ = 0;
@@ -142,6 +154,7 @@ private:
     GlobalDirector*  dir_  = nullptr;
     VideoDirector*   videoDir_ = nullptr;
     VisualComposer*  composer_ = nullptr;
+    PresentationSafety* safety_ = nullptr;
     PerformanceMonitor* performanceMonitor_ = nullptr;
     ChannelPerformanceSample performanceSample_;
 

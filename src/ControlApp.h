@@ -9,6 +9,9 @@
 #include "VideoDirector.h"
 #include "PerformanceMonitor.h"
 #include "ofxOsc.h"
+#include "WallIdentify.h"
+#include "DisplayProbe.h"
+#include "PresentationSafety.h"
 
 class ControlApp : public ofBaseApp {
 public:
@@ -16,10 +19,12 @@ public:
                GlobalDirector* dir = nullptr, VideoDirector* videoDir = nullptr,
                VisualComposer* composer = nullptr,
                PerformanceMonitor* performance = nullptr,
-               int oscListenPort = 9002)
+               int oscListenPort = 9002,
+               WallIdentifyState* identify = nullptr,
+               PresentationSafety* safety = nullptr)
         : channels_(channels), pool_(pool), osc_(osc), dir_(dir),
           videoDir_(videoDir), composer_(composer), performance_(performance),
-          oscListenPort_(oscListenPort) {}
+          oscListenPort_(oscListenPort), identify_(identify), safety_(safety) {}
 
     void setup()  override;
     void update() override;
@@ -31,6 +36,11 @@ private:
     bool saveOutputMode(const std::string& mode);
     bool detectAndSaveDualOutputs();
     bool configureMixedWall();
+    bool configureWalls(DisplayProbe::WallPreset preset);
+    bool swapWalls();
+    void toggleIdentify(WallIdentifyState::Mode mode);
+    void toggleLandscapeVideoSafety();
+    void syncIdentifyRotation(const ofJson& cfg);
     void buildWallSummaryFromSettings(const ofJson& cfg);
     void drawGlobalPanel();
     void drawOverview();
@@ -66,4 +76,10 @@ private:
 
     char oscHostBuf_[128] = "localhost";
     int  oscPort_         = 9001;
+    float masterVolume_   = 0.55f;
+    float lastVolumeHeartbeat_ = 0.f;
+    float acknowledgedVolume_ = 0.f;
+    float lastVolumeAckAt_ = -1.f;
+    WallIdentifyState* identify_ = nullptr;
+    PresentationSafety* safety_ = nullptr;
 };

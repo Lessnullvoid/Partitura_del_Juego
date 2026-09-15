@@ -23,6 +23,7 @@ struct CVData {
     struct BlobEntry {
         float x, y, vx, vy, area;
         float bbW = 0.f, bbH = 0.f;
+        unsigned int label = 0;
     };
     std::vector<BlobEntry> blobs;
     float contourLength = 0.f;
@@ -102,6 +103,7 @@ class OSCSender {
 public:
     void setup(const std::string& host, int port);
     void send(const CVData& data);
+    void sendMasterVolume(float volume, int replyPort);
 
     void setHost(const std::string& host) { host_ = host; reconnect(); }
     void setPort(int port)               { port_ = port; reconnect(); }

@@ -105,8 +105,9 @@ void VisualGenerator::ensureAllocated(int width, int height) {
     ofClear(0, 0, 0, 0);
     blurB_.end();
 
-    // Fuente dimensionada para ~22 columnas de lluvia a esta resolución (se carga una vez por cambio de dimensión).
-    const int newFontSize = std::max(8, width_ / 22);
+    // Dimensionar por el lado corto mantiene el mismo tamaño visual de carácter
+    // en canales portrait y landscape.
+    const int newFontSize = std::max(8, std::min(width_, height_) / 22);
     if (newFontSize != loadedFontSize_) {
         fontReady_ = matrixFont_.load(OF_TTF_MONO, newFontSize, true, false);
         loadedFontSize_ = newFontSize;
@@ -754,7 +755,13 @@ void VisualGenerator::renderOrbitalRings(const GeneratorContext& context) {
 void VisualGenerator::renderBitMatrix(const GeneratorContext& context) {
     // Lluvia digital tipo Matrix: cada columna lleva uno o dos flujos de dígitos.
     // La cabeza del flujo es blanco brillante; los caracteres de cola se apagan a gris tenue.
-    const int columns = ofClamp(static_cast<int>(8.f + state_.density * 28.f), 8, 36);
+    const int shortAxisColumns =
+        ofClamp(static_cast<int>(8.f + state_.density * 28.f), 8, 36);
+    const float landscapeExpansion =
+        width_ > height_ ? static_cast<float>(width_) / height_ : 1.f;
+    const int columns = ofClamp(
+        static_cast<int>(std::round(shortAxisColumns * landscapeExpansion)),
+        8, 64);
     const float cellW = static_cast<float>(width_) / columns;
     const int rows = static_cast<int>(std::ceil(static_cast<float>(height_) / cellW)) + 1;
     const float time = static_cast<float>(state_.localTime);

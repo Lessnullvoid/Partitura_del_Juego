@@ -3,8 +3,8 @@
 
 // Dimensiones del FBO de análisis: 1/4 de una visualización 1080x1920.
 // readToPixels a este tamaño cuesta ~0.5 MB frente a ~8 MB a resolución completa (16x más rápido).
-static constexpr int kCvW = 270;
-static constexpr int kCvH = 480;
+static constexpr int kCvShortEdge = 270;
+static constexpr int kCvLongEdge  = 480;
 
 // Aplastamiento de nivel de negro aplicado a mono.frag en eventos de inversión de color del generador.
 // Aplasta el brillo de fondo (típicamente 3-8% de luminancia de feedback/bloom) a
@@ -46,6 +46,9 @@ void Channel::setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const
     idx_  = idx;
     w_    = w;
     h_    = h;
+    const bool landscape = w_ >= h_;
+    cvW_ = landscape ? kCvLongEdge  : kCvShortEdge;
+    cvH_ = landscape ? kCvShortEdge : kCvLongEdge;
     pool_ = pool;
     osc_  = osc;
 
@@ -60,18 +63,20 @@ void Channel::setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const
 
     // FBO pequeño de análisis — solo se lee de vuelta a CPU para CV
     ofFbo::Settings cvfs;
-    cvfs.width          = kCvW;
-    cvfs.height         = kCvH;
+    cvfs.width          = cvW_;
+    cvfs.height         = cvH_;
     cvfs.internalformat = GL_RGBA8;
     cvfs.useDepth       = false;
     cvfs.numSamples     = 0;
     cvFbo_.allocate(cvfs);
 
-    // CVPipeline ve los píxeles del FBO pequeño directamente (halfRes=false, ya a kCvW x kCvH)
+    // CVPipeline ve los píxeles del FBO pequeño directamente. Su orientación
+    // coincide con la del canal para no deformar vídeo landscape.
     CVParams cvpAnalysis = cvp;
     cvpAnalysis.halfRes  = false;
-    cv_.setup(kCvW, kCvH, cvpAnalysis);
-    cv_.setDisplaySize(w, h);   // mantiene getAnalysisScale() = (4, 4)
+    cv_.setup(cvW_, cvH_, cvpAnalysis);
+    cv_.setDisplaySize(w, h);
+    if (safety_) safety_->setLandscapeChannel(idx_, landscape);
 
     score_.setup(w, h);
     generator_.setup(w, h);
@@ -79,8 +84,8 @@ void Channel::setup(int idx, int w, int h, ClipPool* pool, OSCSender* osc, const
     pdjvBridge_.setup(vpcSettings_.pdjvPackagePath);
 
     // Preasigna buffers de staging para el hilo trabajador de CV.
-    cvPixelShare_.allocate(kCvW, kCvH, OF_PIXELS_GRAY);
-    grayPixels_.allocate(kCvW, kCvH, OF_PIXELS_GRAY);
+    cvPixelShare_.allocate(cvW_, cvH_, OF_PIXELS_GRAY);
+    grayPixels_.allocate(cvW_, cvH_, OF_PIXELS_GRAY);
 
     // Lanza el trabajador de CV en un hilo aparte.
     {
@@ -153,6 +158,7 @@ void Channel::resetCvAsync() {
 }
 
 void Channel::loadNextClip() {
+    if (landscapeVideoHidden()) return;
     if (videoDir_) {
         videoDir_->requestNext(idx_);
         applyPendingVideoPlan();
@@ -188,14 +194,33 @@ void Channel::loadNextClip() {
     ofLogNotice("Channel") << "[" << idx_ << "] Playing: " << ofFilePath::getFileName(path);
 }
 
+bool Channel::landscapeVideoHidden() const {
+    return safety_ && safety_->hidesChannel(idx_);
+}
+
+bool Channel::drawLandscapeVideoBlocked() const {
+    if (!landscapeVideoHidden()) return false;
+    const ChapterState* chapter = composerState();
+    return !chapter || chapter->content == ContentType::Video;
+}
+
+void Channel::fillRegionBlack(int x, int y, int w, int h) const {
+    ofPushStyle();
+    ofFill();
+    ofSetColor(0);
+    ofDrawRectangle(x, y, w, h);
+    ofPopStyle();
+}
+
 void Channel::applyPendingVideoPlan() {
-    if (!videoDir_) return;
+    if (!videoDir_ || landscapeVideoHidden()) return;
     const VideoPlan& plan = videoDir_->planFor(idx_);
     if (plan.revision <= 0 || plan.revision == appliedPlanRevision_) return;
     loadVideoPlan(plan);
 }
 
 bool Channel::loadVideoPlan(const VideoPlan& plan) {
+    if (landscapeVideoHidden()) return false;
     if (plan.path.empty()) return false;
 
     player_.stop();
@@ -318,6 +343,7 @@ VideoGeneratorContext Channel::buildVideoGeneratorContext() const {
         ctx.maskTexture = &pdjvMaskTex_;
     if (pdjvDepthTex_.isAllocated())
         ctx.depthTexture = &pdjvDepthTex_;
+    ctx.cvData = &cvPubData_;
     if (const ChapterState* state = composerState()) {
         if (state->content == ContentType::Video) {
             if (state->stage == TemporalStage::Appearance)
@@ -334,6 +360,37 @@ VideoGeneratorContext Channel::buildVideoGeneratorContext() const {
 void Channel::drawVideoPointCloud(int x, int y, int segW, int segH) {
     const auto ctx = buildVideoGeneratorContext();
     videoPointCloud_.draw(ctx, ofRectangle(x, y, segW, segH));
+}
+
+void Channel::drawComputerVisionValues(int x, int y,
+                                       int segW, int segH) const {
+    const int count = std::min(
+        static_cast<int>(cvPubData_.blobs.size()), 8);
+    const int lineHeight = 14;
+    const int panelWidth = std::min(segW - 16, 250);
+    const int panelHeight = 30 + count * lineHeight;
+    if (panelWidth <= 0 || segH <= 0) return;
+
+    ofPushStyle();
+    ofFill();
+    ofSetColor(0, 0, 0, 145);
+    ofDrawRectangle(x + 8, y + 8, panelWidth, panelHeight);
+    ofSetColor(255, 225);
+    ofDrawBitmapString(
+        "CV  N=" + ofToString(cvPubData_.blobCount) +
+        "  E=" + ofToString(cvPubData_.motionEnergy, 3),
+        x + 14, y + 23);
+
+    for (int i = 0; i < count; ++i) {
+        const CVData::BlobEntry& blob =
+            cvPubData_.blobs[static_cast<std::size_t>(i)];
+        const std::string line =
+            "ID " + ofToString(blob.label) +
+            "  A " + ofToString(static_cast<int>(blob.area)) +
+            "  XY " + ofToString(blob.x, 2) + "," + ofToString(blob.y, 2);
+        ofDrawBitmapString(line, x + 14, y + 39 + i * lineHeight);
+    }
+    ofPopStyle();
 }
 
 bool Channel::applyVpcOscParam(const std::string& param,
@@ -633,6 +690,13 @@ void Channel::update() {
         applyPendingVideoPlan();
     }
 
+    if (landscapeVideoHidden()) {
+        player_.setPaused(true);
+        if (updateProceduralChapter()) return;
+        sendOscSnapshot(cvPubData_);
+        return;
+    }
+
     if (updateProceduralChapter()) return;
 
     uint64_t sectionStarted = ofGetElapsedTimeMicros();
@@ -696,6 +760,11 @@ void Channel::update() {
 
     // --- FBO de visualización: shader B&W sobre vídeo a resolución completa, recorte cover ---
     sectionStarted = ofGetElapsedTimeMicros();
+    const ChapterState* visualChapter = composerState();
+    const bool computerVisionChapter =
+        visualChapter &&
+        visualChapter->content == ContentType::Video &&
+        visualChapter->videoDisplayMode == VideoDisplayMode::ComputerVision;
     if (!vpcSettings_.enabled) {
         bwFbo_.begin();
         ofClear(0);
@@ -714,7 +783,9 @@ void Channel::update() {
     // pero se escalona como máximo un readback cada dos fotogramas renderizados
     // entre los ocho canales. OSC sigue cada fotograma con la última instantánea CV.
     const int analysisInterval = vpcSettings_.enabled
-        ? std::max(16, cv_.params().analysisEveryNFrames)
+        ? (computerVisionChapter
+            ? std::max(8, cv_.params().analysisEveryNFrames)
+            : std::max(16, cv_.params().analysisEveryNFrames))
         : std::max(1, cv_.params().analysisEveryNFrames);
     const bool analyzeThisFrame =
         ((ofGetFrameNum() + static_cast<uint64_t>(idx_)) %
@@ -736,7 +807,7 @@ void Channel::update() {
         // evita que los ocho readbacks caigan en el mismo fotograma renderizado.
         cvFbo_.begin();
         ofClear(0);
-        player_.draw(0, 0, kCvW, kCvH);
+        player_.draw(0, 0, cvW_, cvH_);
         cvFbo_.end();
 
         sectionStarted = ofGetElapsedTimeMicros();
@@ -772,7 +843,20 @@ void Channel::update() {
     // Pasa la textura bw y la textura de vídeo original al renderizador de la partitura
     sectionStarted = ofGetElapsedTimeMicros();
     if (vpcSettings_.enabled) {
+        // Los tres modos de vídeo comparten geometría, cámara y profundidad VPC;
+        // únicamente cambia la asignación cromática de los puntos.
+        const ChapterState* vpcChapter = composerState();
         VideoPointCloudSettings active = vpcSettings_;
+        VideoDisplayMode displayMode = VideoDisplayMode::PointCloud;
+        if (vpcChapter && vpcChapter->content == ContentType::Video)
+            displayMode = vpcChapter->videoDisplayMode;
+        if (displayMode == VideoDisplayMode::Thermal)
+            active.colorMode = PointCloudColorMode::Thermal;
+        else if (displayMode == VideoDisplayMode::ComputerVision)
+            active.colorMode = PointCloudColorMode::ComputerVision;
+        else
+            active.colorMode = PointCloudColorMode::Monochrome;
+
         if (active.depthSource != PointCloudDepthSource::Luminance &&
             !pdjvBridge_.available()) {
             active.depthSource = PointCloudDepthSource::Luminance;
@@ -782,14 +866,17 @@ void Channel::update() {
                 ? player_.getPosition() * player_.getDuration()
                 : 0.0;
             pdjvBridge_.sync(t, pdjvView_, pdjvMaskTex_, pdjvDepthTex_);
-            if (!pdjvView_.valid && active.depthSource != PointCloudDepthSource::Luminance) {
+            if (!pdjvView_.valid &&
+                active.depthSource != PointCloudDepthSource::Luminance) {
                 active.depthSource = PointCloudDepthSource::Luminance;
                 active.maskMode = PointCloudMaskMode::FullFrame;
             }
         }
         videoPointCloud_.settings() = active;
         videoPointCloud_.update(buildVideoGeneratorContext(), ofGetLastFrameTime());
-        performanceSample_.scoreMode = 100;
+        performanceSample_.scoreMode =
+            displayMode == VideoDisplayMode::Thermal ? 101 :
+            displayMode == VideoDisplayMode::ComputerVision ? 102 : 100;
     } else {
         score_.update(bwFbo_.getTexture(), player_.getTexture(), cv_);
         performanceSample_.scoreMode = static_cast<int>(score_.currentMode());
@@ -828,14 +915,42 @@ void Channel::applyPolarity(int x, int y, int segW, int segH, bool isVpc) const 
 void Channel::draw() {
     const uint64_t drawStarted = ofGetElapsedTimeMicros();
     int sw = ofGetWidth(), sh = ofGetHeight();
+    if (drawLandscapeVideoBlocked()) {
+        fillRegionBlack(0, 0, sw, sh);
+        if (dir_ && dir_->isClearActive()) {
+            ofPushStyle();
+            ofFill();
+            ofEnableAlphaBlending();
+            ofColor cc = dir_->getClearColor();
+            ofSetColor(cc.r, cc.g, cc.b, (int)dir_->getClearAlpha());
+            ofDrawRectangle(0, 0, sw, sh);
+            ofPopStyle();
+        }
+        performanceSample_.drawMs = elapsedMilliseconds(drawStarted);
+        if (performanceMonitor_)
+            performanceMonitor_->recordChannelDraw(idx_, performanceSample_.drawMs);
+        return;
+    }
     const ChapterState* chapter = composerState();
-    const bool drawVpc = vpcSettings_.enabled &&
+    const bool videoContent = vpcSettings_.enabled &&
         (!chapter || chapter->content == ContentType::Video);
+    const VideoDisplayMode vDispMode =
+        (chapter && chapter->content == ContentType::Video)
+            ? chapter->videoDisplayMode
+            : VideoDisplayMode::PointCloud;
+    const bool drawVpc     = videoContent && vDispMode == VideoDisplayMode::PointCloud;
+    const bool drawThermal = videoContent && vDispMode == VideoDisplayMode::Thermal;
+    const bool drawCv      = videoContent && vDispMode == VideoDisplayMode::ComputerVision;
     const bool anyInvert = composer_ &&
         (composer_->generatorInvertActive() || composer_->polarityInvertActive());
-    const float blackCrush = (!drawVpc && anyInvert) ? kInvertBlackLevel : 0.f;
+    const float blackCrush = (!drawVpc && !drawThermal && !drawCv && anyInvert) ? kInvertBlackLevel : 0.f;
     if (drawVpc) {
         drawVideoPointCloud(0, 0, sw, sh);
+    } else if (drawThermal) {
+        drawVideoPointCloud(0, 0, sw, sh);
+    } else if (drawCv) {
+        drawVideoPointCloud(0, 0, sw, sh);
+        drawComputerVisionValues(0, 0, sw, sh);
     } else if (sw == w_ && sh == h_) {
         score_.draw(0, 0, w_, h_, blackCrush);
     } else {
@@ -883,7 +998,7 @@ void Channel::draw() {
         }
     }
 
-    applyPolarity(0, 0, sw, sh, drawVpc);
+    applyPolarity(0, 0, sw, sh, drawVpc || drawThermal || drawCv);
     performanceSample_.drawMs = elapsedMilliseconds(drawStarted);
     if (performanceMonitor_)
         performanceMonitor_->recordChannelDraw(idx_, performanceSample_.drawMs);
@@ -891,14 +1006,42 @@ void Channel::draw() {
 
 void Channel::drawInRegion(int x, int y, int segW, int segH) {
     const uint64_t drawStarted = ofGetElapsedTimeMicros();
+    if (drawLandscapeVideoBlocked()) {
+        fillRegionBlack(x, y, segW, segH);
+        if (dir_ && dir_->isClearActive()) {
+            ofPushStyle();
+            ofFill();
+            ofEnableAlphaBlending();
+            ofColor cc = dir_->getClearColor();
+            ofSetColor(cc.r, cc.g, cc.b, (int)dir_->getClearAlpha());
+            ofDrawRectangle(x, y, segW, segH);
+            ofPopStyle();
+        }
+        performanceSample_.drawMs = elapsedMilliseconds(drawStarted);
+        if (performanceMonitor_)
+            performanceMonitor_->recordChannelDraw(idx_, performanceSample_.drawMs);
+        return;
+    }
     const ChapterState* chapter = composerState();
-    const bool drawVpc = vpcSettings_.enabled &&
+    const bool videoContent = vpcSettings_.enabled &&
         (!chapter || chapter->content == ContentType::Video);
+    const VideoDisplayMode vDispMode =
+        (chapter && chapter->content == ContentType::Video)
+            ? chapter->videoDisplayMode
+            : VideoDisplayMode::PointCloud;
+    const bool drawVpc     = videoContent && vDispMode == VideoDisplayMode::PointCloud;
+    const bool drawThermal = videoContent && vDispMode == VideoDisplayMode::Thermal;
+    const bool drawCv      = videoContent && vDispMode == VideoDisplayMode::ComputerVision;
     const bool anyInvert = composer_ &&
         (composer_->generatorInvertActive() || composer_->polarityInvertActive());
-    const float blackCrush = (!drawVpc && anyInvert) ? kInvertBlackLevel : 0.f;
+    const float blackCrush = (!drawVpc && !drawThermal && !drawCv && anyInvert) ? kInvertBlackLevel : 0.f;
     if (drawVpc) {
         drawVideoPointCloud(x, y, segW, segH);
+    } else if (drawThermal) {
+        drawVideoPointCloud(x, y, segW, segH);
+    } else if (drawCv) {
+        drawVideoPointCloud(x, y, segW, segH);
+        drawComputerVisionValues(x, y, segW, segH);
     } else if (segW == w_ && segH == h_) {
         score_.draw(x, y, w_, h_, blackCrush);
     } else {
@@ -940,7 +1083,7 @@ void Channel::drawInRegion(int x, int y, int segW, int segH) {
         }
     }
 
-    applyPolarity(x, y, segW, segH, drawVpc);
+    applyPolarity(x, y, segW, segH, drawVpc || drawThermal || drawCv);
     performanceSample_.drawMs = elapsedMilliseconds(drawStarted);
     if (performanceMonitor_)
         performanceMonitor_->recordChannelDraw(idx_, performanceSample_.drawMs);
