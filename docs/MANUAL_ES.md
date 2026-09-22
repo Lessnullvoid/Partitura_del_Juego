@@ -29,6 +29,19 @@
 Mac procesa vídeo deportivo pregrabado y genera en tiempo real ocho canales
 visuales independientes y ocho canales de audio espacial.
 
+### Entender la partitura antes de operar
+
+La obra organiza materiales en el tiempo. El vídeo aporta imágenes y medidas;
+el compositor decide duraciones y relaciones entre canales; el motor sonoro
+interpreta ese estado mediante síntesis y espacialización. Dos pantallas pueden
+compartir un material o desarrollar episodios distintos bajo el mismo reloj.
+
+Para seguir el proceso con ejemplos, consultar
+[Cómo funciona Partitura del Juego](COMO_FUNCIONA_ES.md). La guía distingue
+mediciones de imagen, reglas compositivas y resultados audiovisuales. Las
+[ampliaciones de la edición de trabajo](EDICION_DE_TRABAJO_ES.md) se documentan
+por separado para no confundirlas con las funciones de un paquete anterior.
+
 ### Flujo de señal
 
 ```

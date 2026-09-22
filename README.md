@@ -4,13 +4,42 @@ Instalación audiovisual generativa construida con openFrameworks (C++) y SuperC
 
 El modo de salida activo es `dualWindow8`. El compositor visual (`VisualComposer`) está habilitado por defecto. Cada canal genera además una nube de puntos de vídeo por GPU. El runtime volumétrico independiente vive en `volumetric/` (sin vídeo fuente). El análisis fuera de línea vive en `analyzer/`. Formato PDJV: `docs/pdjv/PDJV_FORMAT.md`.
 
-## Descarga
+## Cómo leer la obra
 
-**[Partitura_del_Juego-macOS-arm64.zip](https://github.com/Lessnullvoid/Partitura_del_Juego/releases/download/pdj-video-pointcloud-v1/Partitura_del_Juego-macOS-arm64.zip)** — paquete macOS arm64 (M1 o posterior). Incluye la aplicación compilada, la biblioteca de 48 clips, los shaders y los scripts de audio SuperCollider. No requiere openFrameworks. Ver `distribution/README-macOS-test.md` para instrucciones de primer uso.
+La instalación convierte vídeos deportivos en una composición de imágenes y
+sonidos. Primero mide cómo cambia la imagen; después combina esas medidas con
+reglas de duración, contraste y coordinación entre ocho pantallas. La
+«partitura» es ese conjunto de reglas que se interpreta durante la ejecución.
 
-[SHA-256](https://github.com/Lessnullvoid/Partitura_del_Juego/releases/download/pdj-video-pointcloud-v1/Partitura_del_Juego-macOS-arm64.zip.sha256) · [Todas las versiones](https://github.com/Lessnullvoid/Partitura_del_Juego/releases)
+Para empezar, leer **[Cómo funciona Partitura del Juego](docs/COMO_FUNCIONA_ES.md)**:
+explica el recorrido completo, los algoritmos, el papel del azar y la relación
+entre imagen, sonido y espacio, con ejemplos y diagramas.
+
+| Pregunta | Idea principal |
+|---|---|
+| ¿Qué aporta el vídeo? | Cambios de imagen, desplazamientos y regiones que el sistema puede medir. |
+| ¿Qué decide la partitura? | Qué material aparece, cuánto dura y cómo se relaciona con los otros canales. |
+| ¿Cómo se genera el sonido? | SuperCollider interpreta el estado visual y los datos mediante voces y efectos. |
+| ¿Se repite exactamente? | Las reglas, la memoria reciente y las selecciones ponderadas producen variaciones. |
+
+La [edición de trabajo de septiembre de 2026](docs/EDICION_DE_TRABAJO_ES.md)
+añade secciones de larga duración, detección de personas, análisis previo,
+paletas y un visor de actividad sonora. Esa guía identifica las ampliaciones
+locales: no presupone que estén presentes en el código público o en un ZIP
+descargado anteriormente.
+
+## Distribución
+
+El proyecto prepara paquetes para macOS arm64 (Apple Silicon). Consultar las
+[versiones publicadas](https://github.com/Lessnullvoid/Partitura_del_Juego/releases)
+y la [guía de distribución](distribution/README-macOS-test.md) para los detalles.
+En la revisión del 22 de septiembre de 2026, el repositorio no tiene una release
+publicada: el antiguo enlace directo al ZIP no es una descarga disponible.
 
 **Documentación:**
+
+- [Cómo funciona la partitura](docs/COMO_FUNCIONA_ES.md) — guía pedagógica: materiales, algoritmos, decisiones, imagen y sonido
+- [La edición de trabajo](docs/EDICION_DE_TRABAJO_ES.md) — ampliaciones locales y alcance real de cada función
 - [Manual de instalación y operación](docs/MANUAL_ES.md) — guía completa: hardware, DANTE, arranque, ControlApp, apagado, diagnóstico
 - [Audio multicanal DANTE](docs/AUDIO_MULTICHANNEL_ES.md) — motor SuperCollider, DBAP, calibración de altavoces, troubleshooting
 - [Distribución macOS](distribution/README-macOS-test.md) — estructura del paquete y prueba de humo
@@ -22,7 +51,7 @@ El modo de salida activo es `dualWindow8`. El compositor visual (`VisualComposer
 
 El título opera sobre un doble significado: *partitura* como notación musical que prescribe qué interpretar, y *juego* como partido y como play. El vídeo deportivo —ya de por sí un documento de movimiento colectivo y acontecimiento— es releído como dato en bruto, y ese dato se convierte en notación. Los atletas se convierten en intérpretes involuntarios de una partitura que nunca verán.
 
-La instalación no intenta analizar ni interpretar el partido. Usa el movimiento, la proximidad, las colisiones y la densidad espacial del juego puramente como señales de entrada —igual que un compositor podría usar un dado o una fuente de ruido— para generar un lenguaje visual y sonoro que bebe de la estética datamatic de Ryoji Ikeda: clínico, escaso, de alta frecuencia, indiferente a la narrativa.
+La instalación mide propiedades de la imagen y las utiliza como señales compositivas: cambio de brillo, desplazamiento, proximidad de regiones y concentración espacial. Los eventos llamados «colisión» o «balón» son estimaciones, no una interpretación fiable de las reglas del partido. El lenguaje visual y sonoro toma la estética de datos de Ryoji Ikeda como referencia artística, con pulsos, líneas, ruido, presión grave, contraste y pausas.
 
 ---
 
@@ -76,7 +105,7 @@ Anchura lógica total del sistema: 8640 px (8 × 1080). La resolución real por 
 
 ## Pipeline de visión artificial
 
-Cada canal ejecuta un pipeline OpenCV independiente en cada fotograma. El vídeo se escala a la mitad de resolución para el análisis, manteniendo la ruta de visualización en GPU a resolución completa. El buffer de análisis respeta la orientación del canal: **270×480 px** para los canales de retrato (Wall A, canales 0–3) y **480×270 px** para los canales apaisados (Wall B, canales 4–7). El procesamiento CV corre en un hilo trabajador independiente; el hilo principal publica píxeles y consume el resultado sin bloquear el render.
+Cada canal dispone de un análisis OpenCV que trabaja sobre copias reducidas del vídeo. La preparación y el análisis se separan del dibujo de la salida, y el trabajo CV se realiza en un hilo independiente. Su cadencia y resolución efectiva dependen de la configuración; no hay que equipararlas a la resolución del monitor ni asumir un análisis nuevo por cada fotograma dibujado. La [guía pedagógica](docs/COMO_FUNCIONA_ES.md#4-qué-se-mide-y-qué-significan-los-datos) explica cada medida y sus límites.
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","primaryColor":"#141414","primaryTextColor":"#e8e8e8","primaryBorderColor":"#707070","lineColor":"#8a8a8a","clusterBkg":"#0d0d0d","clusterBorder":"#3d3d3d","titleColor":"#e8e8e8","edgeLabelBackground":"#1a1a1a"}}}%%
@@ -104,7 +133,7 @@ flowchart TB
     UPD --> FLOW
     UPD --> ME
     MOG --> CF
-    MOG --> CANNY
+    UPD --> CANNY
     FLOW --> FM
     CF --> ED
     CANNY --> GS
@@ -123,14 +152,14 @@ flowchart TB
 
 ### Sustracción de fondo
 
-`cv::BackgroundSubtractorMOG2` mantiene un modelo estadístico del fondo sobre una ventana histórica deslizante (por defecto 120 fotogramas). Cada nuevo fotograma se compara con ese modelo para generar una máscara binaria de primer plano que aísla los cuerpos en movimiento del campo estático.
+`cv::BackgroundSubtractorMOG2` mantiene un modelo estadístico adaptativo del fondo; el parámetro de historia regula su aprendizaje. La comparación con cada imagen genera una máscara de primer plano. Puede incluir cuerpos, sombras y otros cambios; no identifica personas por sí sola y puede responder al movimiento de cámara.
 
 ### Flujo óptico
 
 `ofxCv::FlowFarneback` opera sobre fotogramas en escala de grises consecutivos y produce un campo de velocidades 2D por píxel. Se extraen dos valores agregados:
 
-- **Magnitud del flujo** — longitud media del vector, codifica intensidad global del movimiento.
-- **Ángulo del flujo** — dirección media del vector, codifica dirección dominante.
+- **Magnitud del flujo** — longitud del vector medio del campo. Direcciones opuestas pueden cancelarse; no equivale a la media de las magnitudes ni a la actividad total.
+- **Ángulo del flujo** — orientación del vector medio, obtenida con `atan2`. Tiene poca representatividad cuando ese vector es muy pequeño.
 
 ### Detección de contornos y seguimiento de blobs
 
@@ -146,10 +175,10 @@ Canny opera sobre el fotograma en escala de grises con umbrales bajo/alto config
 
 | Evento | Lógica de detección |
 |---|---|
-| **Colisión** | IoU entre bounding boxes supera el umbral, o el recuento de blobs cae bruscamente |
-| **Balón** | Blob menor que `ballMaxArea` px² cuya velocidad supera `ballMinSpeed` |
+| **Colisión estimada** | IoU entre cajas supera el umbral, o el recuento de blobs cae bruscamente; no confirma contacto físico |
+| **Candidato a balón** | En la base pública: blob pequeño y rápido. La edición de trabajo añade filtros y confirmación temporal |
 | **Multitud** | Al menos `crowdMinBlobs` blobs dentro del radio normalizado `crowdMaxDist` |
-| **Distancia de piernas** | Elongación media de los blobs (bbH / √area), proxy de jugadores de pie |
+| **Elongación (`legDistance`)** | Proporción entre altura y área normalizada de las regiones; no mide distancia anatómica entre piernas |
 
 ---
 
