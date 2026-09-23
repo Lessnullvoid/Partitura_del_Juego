@@ -1,0 +1,11 @@
+[
+  {"file":"COMO_FUNCIONA_ES.md","title":"Cómo funciona la partitura","group":"Educación y mediación"},
+  {"file":"MEDIACION_MUSEOS_ES.md","title":"Mediación para museos","group":"Educación y mediación"},
+  {"file":"PARTITURA_SONORA_ES.md","title":"Leer la franja sonora","group":"Educación y mediación"},
+  {"file":"ALGORITMOS_Y_PROCESOS_ES.md","title":"Algoritmos y procesos","group":"Profundizar"},
+  {"file":"CV_OVERLAYS_ES.md","title":"Cuerpos y campo","group":"Profundizar"},
+  {"file":"MANUAL_DIARIO_COMANDOS_ES.md","title":"Operación diaria","group":"Instalación y sala"},
+  {"file":"MANUAL_ES.md","title":"Instalación y controles","group":"Instalación y sala"},
+  {"file":"AUDIO_MULTICHANNEL_ES.md","title":"Audio de sala","group":"Instalación y sala"},
+  {"file":"OFFLINE_ANALYSIS_ES.md","title":"Análisis de la biblioteca","group":"Instalación y sala"}
+]

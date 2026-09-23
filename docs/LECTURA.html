@@ -1,0 +1,1503 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="pdj-documentation-sha256" content="b23ca6ab47ffd4c4a61a9b371a0f5c90fb7a3f4a471823b19100d02f2dee460c">
+<title>Partitura del Juego · Guías para el museo</title>
+<style>
+:root{color-scheme:light;--ink:#202723;--muted:#59665f;--paper:#faf9f4;--accent:#315c49;--line:#d9ded6}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.7 system-ui,-apple-system,sans-serif}
+a{color:var(--accent);text-underline-offset:3px}a:focus-visible,button:focus-visible{outline:3px solid #8b5a24;outline-offset:3px}
+.skip{position:absolute;left:10px;top:-80px;background:white;padding:10px}.skip:focus{top:10px}
+header{padding:25px 32px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;align-items:center}
+.brand{font-weight:650;letter-spacing:.01em}.subtitle{font-size:13px;color:var(--muted)}button{font:inherit;font-size:14px;border:1px solid var(--line);background:white;border-radius:5px;padding:9px 14px;cursor:pointer}
+.layout{display:grid;grid-template-columns:265px minmax(0,1fr);max-width:1440px;margin:auto}nav{padding:25px 22px;position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto}
+.nav-group{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:22px 10px 7px}nav a{display:block;text-decoration:none;font-size:14px;line-height:1.5;padding:8px 10px;border-radius:4px}nav a[aria-current=page]{background:#e3ebe3;color:#193f2b;font-weight:650}
+main{min-width:0;padding:42px 56px 80px;border-left:1px solid var(--line)}article{max-width:860px;margin:auto;outline:none}article[hidden]{display:none}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}h1{font-family:Georgia,serif;font-size:39px;line-height:1.16;font-weight:500;margin:12px 0 30px}h2{font-size:23px;line-height:1.35;margin:38px 0 15px}h3{font-size:19px;margin:28px 0 12px}p{margin:0 0 18px}li{padding-left:3px;margin:8px 0}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.55;margin:23px 0 28px}td,th{padding:12px;border:1px solid var(--line);vertical-align:top;text-align:left}th{background:#eaf0e8;font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eef0e9;padding:18px;border-radius:5px;font-size:13px;line-height:1.6}code{font-size:.85em;overflow-wrap:anywhere}footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.flow{display:flex;gap:9px;list-style:none;padding:0;font-size:13px;line-height:1.4}.flow li{flex:1;background:#e8eee5;border-top:3px solid #52785e;padding:12px;margin:0}.flow li+li:before{content:'→ ';font-weight:700}
+@media(max-width:800px){header{padding:18px}.layout{display:block}nav{position:static;max-height:none;padding:12px 18px}main{border-left:0;border-top:1px solid var(--line);padding:28px 20px}h1{font-size:31px}.flow{display:block}.flow li{margin:8px 0}table{font-size:12px}td,th{padding:7px}}
+@media print{@page{size:A4;margin:18mm}body{background:white;font-size:10.5pt;line-height:1.5}header,nav,.skip{display:none}.layout{display:block}main{padding:0;border:0}h1{font-size:25pt}h2{font-size:15pt;break-after:avoid}h3{break-after:avoid}p,li{orphans:3;widows:3}table{font-size:9pt}tr,pre{break-inside:avoid}a{color:inherit}footer{font-size:8pt}}
+</style></head><body><a class="skip" href="#contenido">Ir al contenido</a>
+<header><div><div class="brand">Partitura del Juego</div><div class="subtitle">Educación · Mediación · Instalación</div></div><button type="button" id="print">Imprimir esta guía</button></header>
+<div class="layout"><nav aria-label="Guías del museo"><p class="nav-group">Educación y mediación</p><a href="#como_funciona_es">Cómo funciona la partitura</a>
+<a href="#mediacion_museos_es">Mediación para museos</a>
+<a href="#partitura_sonora_es">Leer la franja sonora</a>
+<p class="nav-group">Profundizar</p><a href="#algoritmos_y_procesos_es">Algoritmos y procesos</a>
+<a href="#cv_overlays_es">Cuerpos y campo</a>
+<p class="nav-group">Instalación y sala</p><a href="#manual_diario_comandos_es">Operación diaria</a>
+<a href="#manual_es">Instalación y controles</a>
+<a href="#audio_multichannel_es">Audio de sala</a>
+<a href="#offline_analysis_es">Análisis de la biblioteca</a></nav><main id="contenido"><article id="como_funciona_es" tabindex="-1"><p class="eyebrow">Educación y mediación</p><h1>Cómo funciona Partitura del Juego</h1>
+<p>Esta guía acompaña la visita a la instalación y el trabajo educativo del museo.
+Se puede leer antes de entrar, consultar después de la experiencia o utilizar
+como apoyo para una conversación. No requiere saber programar ni leer música.</p>
+<h2>Una partitura que se ve y se escucha</h2>
+<p>En una partitura musical, unas indicaciones organizan sonidos en el tiempo.
+En <em>Partitura del Juego</em>, las indicaciones organizan también imágenes: cuándo
+aparece un cuerpo, cuánto permanece una textura, cómo recorre un pulso las
+pantallas o en qué momento el conjunto deja un espacio vacío.</p>
+<p>La obra utiliza vídeos deportivos pregrabados. El ordenador mide cambios y
+movimiento en las imágenes y los transforma en líneas, cifras, puntos y
+sonidos. A la vez, sigue reglas compositivas que ordenan esas transformaciones.
+Cada ejecución combina organización, datos del vídeo y selecciones variables.</p>
+<p>El título permite pensar el juego como partido, movimiento y acto de reproducir.
+Los cuerpos filmados se convierten en materia de una composición que excede
+el acontecimiento deportivo.</p>
+<h2>Del vídeo a la sala</h2>
+<ol class="flow"><li>Un fragmento deportivo</li><li>Medir la imagen</li><li>Organizar los materiales</li><li>Dibujar y producir sonido</li><li>Ver y escuchar relaciones en la sala</li></ol>
+
+
+<p>Primero se elige un clip y un tramo de reproducción. El análisis aporta cambios
+de brillo, desplazamientos y posiciones estimadas. La composición decide qué
+material presenta cada pantalla y durante cuánto tiempo. El programa visual
+dibuja las imágenes y comunica datos al motor de sonido, que produce y
+distribuye el audio entre las salidas de la sala.</p>
+<p>Parte del análisis se prepara con antelación y se consulta siguiendo el tiempo
+del vídeo. La composición y el dibujo se desarrollan durante la ejecución.</p>
+<h2>Qué puede observar el ordenador</h2>
+<p>Podemos mirar un partido y reconocer intenciones, reglas o nombres. El sistema
+trabaja con información más acotada:</p>
+<table>
+<thead>
+<tr>
+<th>Pregunta del análisis</th>
+<th>Qué obtiene</th>
+<th>Qué conviene recordar</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>¿Cuánto cambia la imagen?</td>
+<td>Una medida de diferencia entre imágenes.</td>
+<td>Un corte o un cambio de luz también cuentan.</td>
+</tr>
+<tr>
+<td>¿Hacia dónde parece desplazarse?</td>
+<td>Una estimación de movimiento.</td>
+<td>El movimiento de la cámara influye en el resultado.</td>
+</tr>
+<tr>
+<td>¿Dónde hay personas sobre la superficie de juego?</td>
+<td>Cajas de localización y etiquetas temporales.</td>
+<td>Una etiqueta sigue una detección; no nombra a una persona.</td>
+</tr>
+<tr>
+<td>¿Cómo se distribuyen las detecciones?</td>
+<td>Proximidades, agrupaciones y trayectorias.</td>
+<td>Son relaciones de imagen, no distancias medidas sobre la cancha.</td>
+</tr>
+</tbody></table>
+<p>La detección de personas necesita un modelo y evidencia de superficie de juego.
+Si falta esa evidencia, las marcas pueden desaparecer. Su ausencia no demuestra
+que no haya personas: también expresa límites de la observación.</p>
+<p>«Colisión» y «balón» son hipótesis basadas en geometría, tamaño, movimiento y
+continuidad. La obra no decide si hay una falta ni lleva el marcador del partido.</p>
+<h2>Tres maneras de construir una imagen</h2>
+<p><strong>Transformar el vídeo.</strong> Una cuadrícula traduce brillo a números; los bordes
+se convierten en líneas; las detecciones se marcan con cajas. El vídeo aporta
+una estructura que el tratamiento permite mirar de otra manera.</p>
+<p><strong>Dibujar con reglas.</strong> Los generadores producen matrices, barridos, pulsos,
+campos de líneas y ruido. Sus parámetros cambian con la composición y pueden
+recibir medidas del análisis. Una imagen geométrica participa de la partitura
+aunque no permita reconocer el deporte de origen.</p>
+<p><strong>Construir un relieve de puntos.</strong> El programa toma muestras del vídeo y las
+sitúa en una nube de puntos. El brillo puede determinar su profundidad. La
+sensación de volumen es una transformación visual; no constituye por sí misma
+una medición tridimensional del cuerpo o del campo.</p>
+<p>El tratamiento «térmico» utiliza intensidad y color; no mide temperatura.
+<code>Waveform</code> representa un historial de cambio visual, no la onda sonora.</p>
+<h2>Cómo se organiza el tiempo</h2>
+<p>Un pulso es un acontecimiento breve. Un capítulo permite que un material
+aparezca, se desarrolle, se transforme y se retire de una pantalla. Una sección
+organiza un tramo más largo del conjunto.</p>
+<table>
+<thead>
+<tr>
+<th>Sección</th>
+<th>Una forma de escucharla y observarla</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Calibración</td>
+<td>Atender a lo escaso, lento y contenido.</td>
+</tr>
+<tr>
+<td>Codificación</td>
+<td>Reconocer unidades, cuadrículas y repeticiones.</td>
+</tr>
+<tr>
+<td>Acumulación</td>
+<td>Percibir cómo aumenta la actividad.</td>
+</tr>
+<tr>
+<td>Expansión dimensional</td>
+<td>Seguir relaciones de espacio y superposición.</td>
+</tr>
+<tr>
+<td>Saturación</td>
+<td>Observar concentración, densidad y presión.</td>
+</tr>
+<tr>
+<td>Ruptura</td>
+<td>Reconocer una interrupción o puntuación colectiva.</td>
+</tr>
+<tr>
+<td>Recursión</td>
+<td>Encontrar retornos y reorganizaciones del material.</td>
+</tr>
+</tbody></table>
+<p>La tabla ofrece claves de atención, no un recorrido obligatorio ni una respuesta
+emocional. El orden se elige mediante reglas de contraste y memoria. Una cesura
+separa secciones mediante colapso, vacío y emergencia. La retirada y la
+respiración también componen.</p>
+<p>La variación no implica que cualquier cosa ocurra en cualquier momento. Cada
+sección limita materiales, duraciones y comportamientos. El sistema recuerda
+elecciones recientes y favorece otras posibilidades.</p>
+<h2>Ocho pantallas que se relacionan</h2>
+<p>Cada pantalla corresponde a un canal. Los canales comparten información y reloj,
+pero pueden presentar contenidos diferentes.</p>
+<table>
+<thead>
+<tr>
+<th>Relación</th>
+<th>Qué buscar durante la visita</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Unísono</td>
+<td>Varios canales actúan juntos y el conjunto se percibe como una figura.</td>
+</tr>
+<tr>
+<td>Propagación</td>
+<td>Una acción parece pasar de una zona a otra.</td>
+</tr>
+<tr>
+<td>Contrapunto</td>
+<td>Diferentes actividades conviven y se responden.</td>
+</tr>
+<tr>
+<td>Dos grupos de cuatro</td>
+<td>Dos bloques establecen similitudes o contrastes.</td>
+</tr>
+</tbody></table>
+<p>El programa resume la actividad de las imágenes y la diversidad del material
+visible. Si una tendencia persiste, puede favorecer una relación o una familia
+de materiales. Mantener decisiones durante un tiempo permite percibir frases
+en lugar de respuestas a cada pequeña fluctuación.</p>
+<h2>Cómo se relacionan imagen y sonido</h2>
+<p>Los materiales visuales tienen perfiles de interpretación sonora. El motor
+combina voces sostenidas, pulsos, texturas de ruido, subgraves y acentos.
+Las medidas del vídeo modulan parámetros dentro de esos perfiles; el estado
+compositivo organiza su duración y relación.</p>
+<p>No hay una correspondencia universal entre un cuerpo y una nota. Una medida
+puede intervenir en una textura o en un desplazamiento espacial, según el
+contexto. La relación se construye mediante varias reglas.</p>
+<p>Monochrome, Ember, Glacier, Verdant e Iris organizan el color y participan en
+el tratamiento sonoro. El nombre de una paleta no impone una emoción; la
+interpretación también depende de cada visitante.</p>
+<p>En el montaje multicanal, una fuente se reparte entre varias salidas de audio.
+Nuestra posición modifica la relación con esas fuentes. Una pantalla no
+representa un altavoz exclusivo.</p>
+<h2>Leer la franja sonora</h2>
+<p>En la parte inferior de cada canal hay tres filas: <strong>sonido</strong>, <strong>pulsos</strong> y
+<strong>textura</strong>. La derecha señala <strong>AHORA</strong>; hacia la izquierda quedan seis
+segundos de historia.</p>
+<table>
+<thead>
+<tr>
+<th>Marca</th>
+<th>Lectura</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Punto o marca breve en pulsos</td>
+<td>Actividad breve informada por el motor de audio.</td>
+</tr>
+<tr>
+<td>Trazo en sonido</td>
+<td>Continuidad de la voz medida.</td>
+</tr>
+<tr>
+<td>Trazo grueso en textura</td>
+<td>Actividad de la capa de ruido medida.</td>
+</tr>
+<tr>
+<td>Espacio sin marca</td>
+<td>No hay actividad representada de esa capa en ese tramo.</td>
+</tr>
+</tbody></table>
+<p>La franja representa tres capas instrumentadas. Otras contribuciones y efectos
+pueden escucharse sin una marca propia. Un espacio vacío no certifica silencio
+en toda la sala. Si faltan datos recientes, el presente no permite afirmar que
+haya silencio. La <a href="#partitura_sonora_es">guía de la franja</a> detalla su alcance.</p>
+<h2>Un recorrido posible de atención</h2>
+<ol>
+<li>Elegir una pantalla y describir su material sin intentar nombrar el algoritmo.</li>
+<li>Seguir su entrada, permanencia, transformación y retirada.</li>
+<li>Escuchar si se reconoce una relación temporal con alguna actividad sonora.</li>
+<li>Ampliar la mirada y buscar coincidencias, respuestas o contrastes.</li>
+<li>Cambiar de posición, si es posible, y comparar la experiencia espacial.</li>
+</ol>
+<p>Es útil distinguir observación —«aparecen marcas repetidas»—, interpretación
+—«me recuerdan una carrera»— e hipótesis —«quizá el sonido responde a ese
+movimiento»—. No hace falta encontrar una única relación correcta.</p>
+<p>La <a href="#mediacion_museos_es">guía de mediación</a> propone actividades para trabajar
+estas diferencias. <a href="#algoritmos_y_procesos_es">Algoritmos y procesos</a> explica
+cómo se calculan y utilizan los datos.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="mediacion_museos_es" tabindex="-1"><p class="eyebrow">Educación y mediación</p><h1>Partitura del Juego — Guía de mediación para museos</h1>
+<p>Material para educadoras, educadores y equipos de mediación. Las propuestas se
+adaptan a la edad, el tiempo, la accesibilidad y el contexto del grupo. No
+requieren modificar los controles de la instalación.</p>
+<h2>Propósito del encuentro</h2>
+<p>La obra permite explorar cómo un acontecimiento se convierte en datos y cómo
+esos datos participan en una composición. La mediación invita a reconocer ritmo,
+duración, repetición, pausa y relaciones espaciales; a distinguir observación e
+interpretación; y a preguntar qué puede medir un sistema y qué queda fuera.</p>
+<p>No es necesario descifrar todas las reglas. El punto de partida es lo que cada
+persona ve, escucha o percibe, y cómo lo comparte con otras.</p>
+<h2>Una presentación oral breve</h2>
+<p>«Esta obra utiliza vídeos de deporte como material para una partitura. El
+ordenador mide cambios y movimiento en las imágenes y sigue reglas para
+transformarlos en puntos, líneas, cifras y sonidos. Las ocho pantallas pueden
+actuar juntas o de maneras distintas. Vamos a observar cómo aparecen,
+cambian y desaparecen esas relaciones.»</p>
+<p>Dejar después un tiempo de observación. Nombrar un algoritmo demasiado pronto
+puede cerrar interpretaciones que el grupo aún está formando.</p>
+<h2>Preparar el encuentro</h2>
+<p>Recorrer la instalación con el personal de sala y acordar un lugar desde el que
+el grupo pueda observar y conversar. La obra utiliza destellos, cambios de
+contraste y sonido: comunicarlo y permitir distancia, pausas o salida libre
+según las necesidades personales y las pautas del museo.</p>
+<p>Ofrecer varias formas de participar: mirar una pantalla, escuchar desde un
+asiento, describir, señalar un ritmo, dibujar o trabajar con otra persona.
+La franja sonora representa parte de la mezcla; no es una transcripción completa
+para quienes no escuchan el audio.</p>
+<p>Los controles corresponden al personal autorizado. Las actividades de palmas,
+movimiento o dibujo se realizan en una zona acordada sin interferir con la
+circulación ni con la experiencia de otras personas.</p>
+<h2>Recorrido breve: 10–15 minutos</h2>
+<table>
+<thead>
+<tr>
+<th>Momento</th>
+<th>Propuesta</th>
+<th>Pregunta de apoyo</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Atención individual, 2–3 min</td>
+<td>Elegir una pantalla o una fuente de atención sonora.</td>
+<td>¿Qué cambia y qué permanece?</td>
+</tr>
+<tr>
+<td>Puesta en común, 3 min</td>
+<td>Describir un acontecimiento sin explicar su causa.</td>
+<td>¿Qué viste o escuchaste exactamente?</td>
+</tr>
+<tr>
+<td>Atención al conjunto, 3–4 min</td>
+<td>Buscar coincidencias y diferencias entre zonas.</td>
+<td>¿Cuándo parece actuar todo junto?</td>
+</tr>
+<tr>
+<td>Conversación, 2–5 min</td>
+<td>Relacionar experiencia, reglas y datos.</td>
+<td>¿Qué parece medirse y qué parece una decisión compositiva?</td>
+</tr>
+</tbody></table>
+<p>Los tiempos orientan la mediación, no describen duraciones del programa. Si no
+aparece un unísono o una cesura, trabajar con el material presente. Una visita
+breve no garantiza observar todos los estados de la obra.</p>
+<h2>Actividad 1. Inventar una partitura de reglas</h2>
+<p><strong>Para:</strong> infancia acompañada, familias o grupos que se acercan por primera vez.
+<strong>Duración:</strong> unos 10 minutos. <strong>Material:</strong> papel, lápices y tarjetas con un
+punto, una línea y un espacio vacío.</p>
+<ol>
+<li>Acordar una interpretación: punto para un gesto breve, línea para uno que
+dura y vacío para una pausa. Usar manos, voz suave o movimientos visibles
+según el grupo y el lugar.</li>
+<li>Ordenar las tarjetas y realizar la secuencia.</li>
+<li>Mantener los símbolos y cambiar una regla: responder por turnos, repetir
+dos veces o actuar en dos grupos.</li>
+<li>Comparar resultados y volver a observar las pantallas.</li>
+</ol>
+<p>Preguntar: «¿Qué permanece cuando cambia la regla? ¿Podemos interpretar la
+misma partitura de maneras diferentes? ¿Una pausa también forma parte de ella?».</p>
+<p>Estos símbolos son una convención del grupo. No reproducen todo el código ni
+toda la notación de la instalación.</p>
+<h2>Actividad 2. Lo que vemos y lo que el sistema mide</h2>
+<p><strong>Para:</strong> secundaria, personas adultas o grupos intergeneracionales.
+<strong>Duración:</strong> 10–15 minutos. <strong>Material:</strong> una hoja con tres columnas.</p>
+<p>Escribir <strong>Observación</strong>, <strong>Interpretación</strong> e <strong>Hipótesis</strong>. Elegir un
+acontecimiento y completar las columnas. Por ejemplo:</p>
+<table>
+<thead>
+<tr>
+<th>Observación</th>
+<th>Interpretación</th>
+<th>Hipótesis que necesita contraste</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Varias cajas cambian de posición.</td>
+<td>La escena se siente agitada.</td>
+<td>El programa puede estar siguiendo personas.</td>
+</tr>
+<tr>
+<td>Aumentan los cambios en toda la imagen.</td>
+<td>Parece que la acción se acelera.</td>
+<td>Puede intervenir un movimiento de cámara.</td>
+</tr>
+<tr>
+<td>No hay marcas en una fila de la franja.</td>
+<td>Percibo una pausa.</td>
+<td>Puede faltar actividad de esa capa o datos recientes; otras capas pueden sonar.</td>
+</tr>
+</tbody></table>
+<p>Explicar que el análisis de personas utiliza detección y condiciones de
+superficie de juego. Preguntar: «¿Qué sucede cuando una persona queda tapada?
+¿Una caja permite conocer quién es? ¿Qué perdemos al resumir una imagen en
+números?». No hace falta resolver las preguntas de manera unánime.</p>
+<h2>Actividad 3. Componer relaciones de grupo</h2>
+<p><strong>Para:</strong> grupos interesados en música, movimiento o trabajo colectivo.
+<strong>Duración:</strong> 10–15 minutos. <strong>Material:</strong> ninguno; se puede realizar sentado.</p>
+<p>Elegir un gesto cómodo y accesible. Realizarlo de tres formas: todas las personas
+a la vez, una después de otra y en dos grupos con ritmos distintos. Se pueden
+señalar tarjetas o dibujar trazos si el movimiento no resulta adecuado.</p>
+<p>Relacionar la experiencia con <strong>unísono</strong>, <strong>propagación</strong> y <strong>contrapunto</strong>.
+Buscar relaciones parecidas en la obra sin exigir que cada gesto tenga un
+equivalente exacto en pantalla.</p>
+<p>Preguntar: «¿Cambia el conjunto aunque cada persona haga el mismo gesto?
+¿Cómo reconocemos una respuesta? ¿Puede una actividad continuar mientras otra
+se detiene?».</p>
+<h2>Actividad 4. Dibujar una escucha</h2>
+<p><strong>Para:</strong> personas interesadas en representación y percepción.
+<strong>Duración:</strong> unos 10 minutos. <strong>Material:</strong> papel y útiles de dibujo.</p>
+<p>Escuchar u observar un intervalo y dibujar marcas para acontecimientos breves,
+duraciones y pausas. Compartir dibujos y explicar qué intenta representar cada
+marca. Compararlos con <strong>sonido</strong>, <strong>pulsos</strong> y <strong>textura</strong> en la pantalla.</p>
+<p>La actividad también se realiza a partir de cambios visuales. Preguntar:
+«¿Qué elegiste registrar? ¿Qué queda fuera? ¿Dos dibujos distintos pueden
+corresponder a la misma experiencia?». La franja recibe medidas de tres capas
+sonoras; el dibujo personal recoge una selección perceptiva.</p>
+<h2>Palabras para conversar</h2>
+<table>
+<thead>
+<tr>
+<th>Palabra</th>
+<th>Explicación accesible</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Dato</td>
+<td>Un registro o medida de algún aspecto de lo observado.</td>
+</tr>
+<tr>
+<td>Algoritmo</td>
+<td>Un conjunto de pasos y reglas para realizar una tarea.</td>
+</tr>
+<tr>
+<td>Generativo</td>
+<td>Que produce variaciones al ejecutar reglas.</td>
+</tr>
+<tr>
+<td>Reactivo</td>
+<td>Que modifica algún comportamiento en respuesta a una entrada.</td>
+</tr>
+<tr>
+<td>Partitura</td>
+<td>Indicaciones que organizan acciones o materiales en el tiempo.</td>
+</tr>
+<tr>
+<td>Textura</td>
+<td>La manera en que elementos forman una superficie visual o sonora.</td>
+</tr>
+<tr>
+<td>Cesura</td>
+<td>Una separación que permite percibir el paso entre partes.</td>
+</tr>
+<tr>
+<td>Espacialización</td>
+<td>La distribución del sonido entre posiciones de escucha.</td>
+</tr>
+</tbody></table>
+<h2>Precisiones para la mediación</h2>
+<p>La obra utiliza vídeos pregrabados; el público no es la entrada de este análisis.
+La detección de personas no reconoce identidades deportivas. Balón y colisión
+son hipótesis. El color térmico no mide calor y el relieve de puntos no equivale
+a un escaneo tridimensional. No hay una regla general «una persona, una nota».</p>
+<p>Estas precisiones sostienen preguntas sobre representación. También hay lugar
+para asociaciones personales, recuerdos del deporte o lecturas culturales y
+políticas: son interpretaciones del encuentro con la obra.</p>
+<h2>Cerrar la conversación</h2>
+<p>Invitar a compartir una relación reconocida y una pregunta que permanece.
+El equipo puede registrar, de forma anónima y según las pautas del museo, qué
+palabras ayudan al grupo y qué aspectos necesitan otra explicación.</p>
+<p>Consultar <a href="#como_funciona_es">Cómo funciona la partitura</a> para preparar la
+visita y <a href="#algoritmos_y_procesos_es">Algoritmos y procesos</a> para profundizar.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="partitura_sonora_es" tabindex="-1"><p class="eyebrow">Educación y mediación</p><h1>Leer la partitura sonora visible</h1>
+<p>Cada pantalla presenta una franja que representa actividad sonora recibida
+por la aplicación. Permite relacionar duración, acontecimientos breves y
+textura con una parte de la contribución de ese canal.</p>
+<h2>Orientarse en la franja</h2>
+<p>La cabecera indica <strong>PANTALLA</strong> y su número, puede mostrar el nombre de un
+instrumento recibido y contiene un indicador de actividad reciente. La línea
+de <strong>AHORA</strong>, a la derecha, marca el presente. Hacia la izquierda quedan seis
+segundos de historia. Las marcas se desplazan conforme pasa el tiempo.</p>
+<table>
+<thead>
+<tr>
+<th>Fila</th>
+<th>Marca</th>
+<th>Lectura</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>sonido</td>
+<td>Trazo</td>
+<td>Continuidad de la voz principal medida.</td>
+</tr>
+<tr>
+<td>pulsos</td>
+<td>Punto o marca corta</td>
+<td>Actividad breve de la capa instrumentada; un punto representa un pulso contado.</td>
+</tr>
+<tr>
+<td>textura</td>
+<td>Trazo más grueso</td>
+<td>Actividad de la cama de ruido medida.</td>
+</tr>
+</tbody></table>
+<p>Una marca aislada puede aparecer sin un trazo largo. El dibujo conecta muestras
+próximas de una misma fuente y evita unir intervalos con huecos amplios.
+El indicador de nivel resume actividad digital reciente; no está calibrado
+como sonómetro de la sala.</p>
+<h2>De dónde procede la información</h2>
+<p>El motor de SuperCollider mide tres capas: voz principal, motor de pulsos y
+cama de ruido. Envía nivel, identidad de fuente, canal y datos de actividad.
+La aplicación valida la sesión y la secuencia, conserva una historia limitada
+y dibuja el resultado una vez recibido. Dibujar las marcas no dispara sonidos.</p>
+<p>El estado distingue datos recientes de datos caducados. Si se interrumpe la
+comunicación, deja de señalar actividad actual. El espacio sin marca no debe
+interpretarse automáticamente como silencio confirmado de toda la mezcla.</p>
+<h2>Qué representa y qué queda fuera</h2>
+<p>Las tres filas no constituyen una transcripción de todas las voces, eventos,
+subgraves y efectos. Una cola compartida puede escucharse sin una marca propia.
+La actividad medida tampoco confirma que el amplificador esté encendido o que
+un sonido sea perceptible por encima de los demás.</p>
+<p>La posición temporal del visor utiliza la recepción local de mensajes.
+La latencia física de sonido y pantalla requiere ajuste en la instalación;
+la coincidencia visual no es una medición exacta del instante de escucha.
+Una pantalla representa una contribución compositiva y puede distribuir su
+audio entre varias salidas.</p>
+<h2>Propuesta de observación</h2>
+<p>Elegir una fila y seguir una entrada, su duración y su retirada. Después escuchar
+el conjunto y preguntar qué acontecimientos tienen una marca reconocible y
+cuáles no. Se puede dibujar una notación propia y compararla con el visor.
+La <a href="#mediacion_museos_es">guía de mediación</a> desarrolla esta actividad.</p>
+<p>Para revisar el funcionamiento: <code>src/AudioScoreState.h</code>,
+<code>src/AudioScoreOverlay.h</code>, <code>src/ControlApp.cpp</code> y
+<code>supercollider/pdj_datamatics.scd</code> en el código de <code>Source/current-source.tgz</code>.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="algoritmos_y_procesos_es" tabindex="-1"><p class="eyebrow">Profundizar</p><h1>Partitura del Juego — Algoritmos y procesos</h1>
+<p>Esta guía explica cómo el código transforma vídeo y datos en composición.
+Las rutas de archivos se refieren al código incluido en <code>Source/current-source.tgz</code>
+del paquete. Para una lectura sin fórmulas, consultar
+<a href="#como_funciona_es">Cómo funciona la partitura</a>.</p>
+<h2>1. Selección de clips y fragmentos</h2>
+<p><code>ClipPool</code> mantiene bibliotecas vertical y horizontal. En selección independiente
+prefiere clips que no están activos en otro canal del mismo grupo ni en la
+historia reciente del canal. Relaja restricciones si faltan candidatos.
+<code>VideoDirector</code> elige un fragmento corto, uno largo o un vídeo completo; los
+pesos y duraciones se leen de la configuración. Un acontecimiento compartido
+coordina preparación, disponibilidad y tiempo de los participantes.</p>
+<p>Una selección ponderada suma los pesos, sortea un número entre cero y esa suma
+y recorre los intervalos acumulados hasta encontrar la opción. Por ejemplo,
+pesos 5, 3 y 2 producen preferencias del 50 %, 30 % y 20 % en un sorteo sin
+otras restricciones. No garantizan esos porcentajes de tiempo de pantalla:
+las duraciones y condiciones de cada opción también intervienen.</p>
+<h2>2. Preparación y medidas de imagen</h2>
+<p>El análisis trabaja con imágenes reducidas y puede utilizar ajuste de contraste.
+Un trabajador independiente publica resultados que el dibujo consume sin
+ejecutar la detección en cada llamada de presentación. La cadencia de análisis
+y la de dibujo pueden diferir. Con caché válida, las medidas se consultan por
+tiempo de vídeo; siguen preparándose imágenes necesarias para los efectos.</p>
+<h3>Energía de cambio</h3>
+<pre><code class="language-text">energía = media(|gris_actual − gris_anterior|) / 255
+</code></pre>
+<p>Una diferencia media de 12,75 niveles de gris produce 0,05. La medida registra
+cambio de imagen: puede aumentar por cuerpos, cámara, iluminación o montaje.
+No representa esfuerzo físico.</p>
+<h3>Flujo óptico</h3>
+<p>Farneback estima desplazamientos entre imágenes. El programa calcula:</p>
+<pre><code class="language-text">vector_medio = promedio del campo de desplazamientos
+magnitud = longitud(vector_medio)
+dirección = atan2(vector_medio.y, vector_medio.x)
+</code></pre>
+<p>La longitud del vector medio difiere de la media de longitudes: movimientos
+opuestos pueden cancelarse aunque haya mucha actividad. El resultado depende
+del tamaño e intervalo de las imágenes y no mide metros por segundo.</p>
+<h3>Fondo y bordes</h3>
+<p>MOG2 mantiene un modelo estadístico adaptativo y separa cambios respecto al
+fondo. Operaciones morfológicas limpian y agrupan la máscara; los contornos
+aportan geometría y material visual. Canny detecta bordes sobre gris. Ninguno
+de estos resultados, por sí solo, identifica una persona. La admisión de
+personas usa la detección y el filtro de superficie descritos más abajo.</p>
+<p>Las posiciones normalizadas van de 0 a 1; <code>(0,0)</code> está arriba a la izquierda.
+Áreas y longitudes de contorno dependen de las unidades de análisis y no
+equivalen a medidas físicas de campo.</p>
+<h3>Eventos estimados</h3>
+<table>
+<thead>
+<tr>
+<th>Evento</th>
+<th>Cálculo y alcance</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Colisión</td>
+<td>Solapamiento de cajas mediante IoU o caída brusca del recuento; no confirma contacto.</td>
+</tr>
+<tr>
+<td>Balón</td>
+<td>Candidatos pequeños, filtros de forma y velocidad, asociación y confirmación temporal; requiere la ruta de campo habilitada.</td>
+</tr>
+<tr>
+<td>Concentración</td>
+<td>Mayor grupo de detecciones próximas dentro de un radio normalizado.</td>
+</tr>
+<tr>
+<td><code>legDistance</code></td>
+<td>Proxy de elongación basado en altura y área; no mide separación anatómica de piernas.</td>
+</tr>
+</tbody></table>
+<p>IoU es el área de intersección de dos cajas dividida por el área de su unión.
+Las condiciones de validez del análisis pueden inhibir los eventos.</p>
+<h2>3. Forma y capítulos</h2>
+<p>La composición tiene una escala por encima de los capítulos de cada
+pantalla: la <strong>sección</strong>. Una sección determina un vocabulario de materiales,
+un recorrido de tempo, rangos de intensidad y densidad, duraciones y eventos
+permitidos. Así el sistema puede cambiar de carácter durante varios minutos.</p>
+<table>
+<thead>
+<tr>
+<th>Sección</th>
+<th>Función compositiva</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Calibración</td>
+<td>Presenta un estado escaso, lento y contenido.</td>
+</tr>
+<tr>
+<td>Codificación</td>
+<td>Da protagonismo a estructuras discretas, matrices y datos.</td>
+</tr>
+<tr>
+<td>Acumulación</td>
+<td>Construye actividad mediante incremento de capas y densidad.</td>
+</tr>
+<tr>
+<td>Expansión dimensional</td>
+<td>Abre relaciones espaciales y capas de material.</td>
+</tr>
+<tr>
+<td>Saturación</td>
+<td>Concentra actividad y presión dentro de límites programados.</td>
+</tr>
+<tr>
+<td>Ruptura</td>
+<td>Interrumpe el desarrollo con una puntuación de conjunto.</td>
+</tr>
+<tr>
+<td>Recursión</td>
+<td>Reorganiza el recorrido y prepara nuevos comienzos.</td>
+</tr>
+</tbody></table>
+<p>Los nombres describen funciones musicales. «Expansión dimensional» no añade
+necesariamente dimensiones físicas a los datos, y «saturación» no ordena
+sobrecargar la salida de audio.</p>
+<p>No se recorren siempre en el orden de la tabla. Una matriz de transición asigna
+preferencias a la siguiente sección; otras reglas evitan repetición inmediata,
+favorecen contraste y recuperan secciones que llevan tiempo sin aparecer.
+Ruptura tiene restricciones de entrada y salida. Dentro de la sección, varios
+parámetros se interpolan entre un valor inicial y uno final.</p>
+<p>En términos sencillos, la selección funciona así:</p>
+<pre><code class="language-text">leer la sección actual y su historia
+obtener los pesos de sus posibles continuaciones
+aplicar restricciones de contraste, repetición y recorrido
+sortear una continuación entre las opciones válidas
+preparar la separación y comenzar la nueva sección
+</code></pre>
+<p>El pseudocódigo resume la intención del algoritmo; los detalles están en
+<code>chooseNextSection()</code> de <code>src/VisualComposer.cpp</code> del programa.</p>
+<h3>La cesura: hacer perceptible el cambio</h3>
+<p>La transición de sección tiene tres fases: <strong>colapso → vacío → emergencia</strong>.
+El conjunto converge, se retira durante un intervalo y presenta el nuevo
+material. La cesura permite percibir una separación formal. El estado de clear
+y su amplitud también llegan al audio para reducir la presencia sonora.</p>
+<p>Las siete secciones no deben confundirse con los nueve estados del análisis
+colectivo. La sección fija un marco de larga duración; el estado colectivo
+describe y modula lo que ocurre dentro de él.</p>
+<p>Cada canal presenta capítulos de vídeo, generador, respiración o transición.
+La duración se sortea dentro de rangos y tiene una permanencia mínima. Un
+capítulo atraviesa aparición, desarrollo, umbral, transformación y disolución.
+Su envolvente regula la presencia; la fase normalizada indica el avance entre
+cero y uno. Para el vídeo también se considera el final del fragmento.</p>
+<p>Las relaciones entre canales son unísono, propagación, contrapunto y grupos
+4+4. Comparten reloj y decisiones de organización; el rol de cada canal puede
+introducir diferencias dentro de un material común.</p>
+<h2>4. Análisis colectivo y estabilidad temporal</h2>
+<p><code>VisualComposer</code> combina energía, flujo, concentración y cantidad de detecciones
+para obtener actividad por canal. Resume también coherencia direccional,
+diversidad de materiales, convergencia y tensión. Son índices compositivos,
+no interpretaciones psicológicas ni tácticas del partido.</p>
+<p>La coherencia compara el vector resultante de las direcciones ponderadas con
+la suma de sus pesos: direcciones alineadas dan una lectura mayor; direcciones
+opuestas la reducen. La diversidad considera el reparto del material visible.
+La convergencia mide cuánto domina un generador en el conjunto.</p>
+<p>Los datos se suavizan en el tiempo y proponen uno de nueve estados: suspensión,
+codificación, acumulación, propagación, convergencia, fragmentación, saturación,
+ruptura y residuo. El candidato debe persistir antes de adoptarse; hay permanencia
+mínima y espera entre eventos. Los estados urgentes tienen una espera menor y
+pueden superar la permanencia protegida. Las siete secciones mantienen su marco
+de larga duración sobre estas decisiones.</p>
+<p>Parte del azar utiliza una semilla. La ejecución completa depende además del
+tiempo de carga, los datos, la intervención manual y otros sorteos. Una semilla
+no garantiza por sí sola una repetición audiovisual exacta.</p>
+<h2>5. Técnicas visuales y bolsa barajada</h2>
+<p><code>GraphicScore</code> recibe los modos permitidos por la sección o por un momento
+especial de vídeo. Los baraja mediante Fisher–Yates: recorre la lista desde
+el final e intercambia cada elemento con uno elegido entre las posiciones
+restantes. Intercala <code>BwClean</code> después de cada técnica y rellena la bolsa al
+agotarla. Los modos de una bolsa aparecen antes de volver a sortear la siguiente.</p>
+<p>Esto introduce variación sin permitir cualquier técnica en cualquier momento.
+El cambio de paleta reinicia la selección de modos para que la nueva sección
+se haga visible. <code>SlitScan</code> se activa manualmente; <code>Flash</code> se gestiona como una
+superposición de evento.</p>
+<p>También existen momentos de conjunto dedicados a nube de puntos y a vídeo
+gráfico. Un <strong>momento</strong> organiza una situación interna; una <strong>sección</strong> gobierna
+la forma más larga; un <strong>capítulo</strong> es el episodio de un canal.</p>
+<p>Los modos transforman distintos datos: <code>VideoNumbers</code> convierte brillo de
+celdas en cifras; <code>Barcode</code> resume primer plano por columnas; <code>Waveform</code>
+mantiene historia de energía; <code>VideoLines</code> combina recursos de líneas y
+contornos. Los generadores dibujan estructuras como <code>BitMatrix</code>, <code>PhaseLines</code>,
+<code>Pulse</code>, <code>BarScan</code> o <code>GranularRaster</code> con parámetros del estado compositivo.</p>
+<p>La nube de puntos muestrea el vídeo en una rejilla GPU. La profundidad puede
+derivarse de luminancia o de un paquete PDJV disponible, según configuración.
+El relieve de luminancia no es reconstrucción métrica. El tratamiento térmico
+es una transformación de intensidad y color, no una lectura de temperatura.</p>
+<h2>6. Personas, superficie de juego y seguimiento</h2>
+<p>El análisis utiliza YOLOX-S para detectar personas. La detección se filtra
+según confianza, superficie de juego y apoyo de la zona de los pies. Los clips
+cuyo nombre contiene <code>hinchada</code> quedan fuera del seguimiento de jugadores.
+Si faltan el modelo o la evidencia de superficie, el sistema evita sustituir
+personas por simples manchas de movimiento.</p>
+<p>Las detecciones se relacionan temporalmente y se suavizan para estabilizar sus
+trayectorias. Una caja sigue siendo una localización aproximada: puede incluir
+fondo, fragmentarse, perderse por oclusión o cambiar de identidad. Una persona
+aceptada dentro del campo también puede ser un árbitro.</p>
+<table>
+<thead>
+<tr>
+<th>Modo</th>
+<th>Qué hace visible</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>SurfaceScan</code></td>
+<td>Contornos de movimiento dentro de personas aceptadas.</td>
+</tr>
+<tr>
+<td><code>PlayerIDs</code></td>
+<td>Cajas y etiquetas temporales de seguimiento.</td>
+</tr>
+<tr>
+<td><code>MotionTrails</code></td>
+<td>Historia reciente de posiciones seguidas.</td>
+</tr>
+<tr>
+<td><code>FieldMap</code></td>
+<td>Organización espacial de las detecciones; la proyección al campo depende de geometría válida.</td>
+</tr>
+</tbody></table>
+<p>Los contornos no constituyen segmentación anatómica y las etiquetas no son
+identidades deportivas. El candidato a balón requiere filtros geométricos,
+velocidad y confirmación temporal. Su presencia es una estimación,
+no una garantía de seguimiento correcto.</p>
+<h2>7. Análisis guardado y reproducción</h2>
+<p>El análisis previo guarda resultados al lado de cada vídeo, por ejemplo
+<code>partido.mp4.pdjcv/</code>. Al reproducirlo, la aplicación comprueba si hay datos
+compatibles, consulta su tiempo e interpola posiciones de etiquetas coincidentes.
+Con una caché válida evita repetir la detección neuronal y el flujo óptico.
+La decodificación del vídeo y el dibujo de efectos siguen siendo necesarios.</p>
+<p>Las marcas de tiempo guardadas son la referencia: no debe suponerse que todas
+las muestras tienen exactamente el mismo intervalo. Si se modifica el vídeo,
+la caché puede quedar invalidada y debe regenerarse. Si no hay resultados
+compatibles o falla su lectura, existe una ruta de análisis en vivo.</p>
+<p>Hay dos formatos con propósitos diferentes:</p>
+<table>
+<thead>
+<tr>
+<th>Formato</th>
+<th>Uso</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>.pdjcv</code></td>
+<td>Caché del análisis de clips para esta aplicación de vídeo.</td>
+</tr>
+<tr>
+<td>PDJV</td>
+<td>Paquetes de datos para reconstrucción y usos volumétricos; tienen especificación y herramientas propias.</td>
+</tr>
+</tbody></table>
+<p>No son intercambiables. Tampoco hay que ejecutar el runtime independiente
+<code>volumetric/</code> para usar la caché <code>.pdjcv</code>.</p>
+<h2>8. Color y tratamiento sonoro</h2>
+<p>El director de paletas utiliza cinco familias: Monochrome, Ember, Glacier,
+Verdant e Iris. Cada una contiene una rampa de seis colores. La intensidad de
+la imagen selecciona posiciones de esa rampa; exposición y mutación modifican
+su uso dentro de límites.</p>
+<p>La elección automática depende de la sección y de la historia reciente de
+paletas. Los cambios pueden aprovechar el vacío de una cesura; los cambios
+manuales fuera de ella se funden desde los colores realmente visibles. Los
+pesos de las familias también intervienen en el tratamiento sonoro, de modo que
+un cambio de color puede acompañar una transformación del timbre.</p>
+<p>Una paleta no sustituye a la forma ni garantiza una emoción concreta. Es otro
+conjunto de restricciones y relaciones sobre los materiales existentes.</p>
+<h2>9. OSC, síntesis y espacialización</h2>
+<p>La aplicación envía datos y estados mediante OSC; SuperCollider los interpreta
+en UDP 9001. <code>/pdj/clock/state</code> comunica el reloj, <code>/pdj/collective/state</code> el
+resumen colectivo y <code>/pdj/channel/N/...</code> los controles de cada canal. OSC
+transporta números y mensajes, no el vídeo ni la señal de audio.</p>
+<p>Los perfiles asocian modos y generadores con voces, articulaciones y capas.
+La síntesis combina tonos, impulsos, ruido filtrado, subgraves y acentos. Los
+datos modulan esos materiales dentro del marco compositivo. Revisiones de
+capítulo y de modo distinguen cambios de escena de variaciones continuas.
+Las fases, envolventes y relaciones de organización llegan al motor junto a
+las medidas del vídeo.</p>
+<p>El envío reserva hasta ocho huecos de detecciones por canal y vacía los que no
+se utilizan. La geometría agregada aporta posición, extensión y actividad; un
+hueco no es una identidad permanente. El reloj compartido coordina controles,
+pero UDP no garantiza alineación física exacta de sonido e imagen.</p>
+<p>En las ocho salidas, DBAP calcula:</p>
+<pre><code class="language-text">distancia_i = máximo(distancia entre fuente y altavoz_i, 0,001)
+peso_i = distancia_i ^ (−rolloff) + spread × 0,5
+ganancia_i = peso_i / raíz(media de los pesos al cuadrado)
+</code></pre>
+<p><code>rolloff</code> regula la caída con la distancia y <code>spread</code> añade una contribución
+común. La normalización RMS no significa que las ganancias sumen uno. La
+mezcla, sus niveles y efectos también determinan el resultado. La ruta estéreo
+utiliza panoramización izquierda/derecha. Las posiciones virtuales deben
+corresponder al mapa de salidas que configura el recinto.</p>
+<h2>10. Retorno de actividad sonora</h2>
+<p>El visor muestra tres filas: <strong>sonido</strong>, <strong>pulsos</strong> y <strong>textura</strong>.
+La derecha marca <strong>AHORA</strong>; hacia la izquierda quedan seis segundos de historia.
+Los pulsos se dibujan con puntos o marcas cortas, los sonidos continuos con
+trazos y la textura con trazos más gruesos. Un indicador resume actividad
+reciente y puede aparecer el nombre de un instrumento recibido.</p>
+<p>El audio devuelve medidas de tres capas instrumentadas: voz principal, motor
+de pulsos y cama de ruido. La aplicación valida canal, sesión y secuencia,
+descarta mensajes antiguos y deja de señalar actividad actual cuando los datos
+pierden vigencia. El dibujo consulta ese estado; no genera sonido.</p>
+<p><strong>La representación comprende tres capas.</strong> Las tres filas no explican necesariamente
+todas las voces, acentos ni efectos de la mezcla. Una medida de señal digital
+tampoco confirma que el altavoz esté encendido o que ese sonido sea perceptible
+en sala. La latencia física entre imagen y sonido requiere calibración; el
+visor usa el instante local de recepción de los datos.</p>
+<p>Para comprobar su lectura, conviene aislar una fuente, observar su comienzo,
+su duración y su final, y después escucharla en el conjunto. Una pantalla
+representa una contribución sonora, no la salida exclusiva de un altavoz.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="cv_overlays_es" tabindex="-1"><p class="eyebrow">Profundizar</p><h1>Visión de cuerpos, trayectorias y campo</h1>
+<p>Los modos de visión superponen marcas a los vídeos a partir de detecciones y
+geometría. La aplicación utiliza YOLOX-S para localizar personas y un filtro
+de superficie de juego para admitir las detecciones. Las marcas son resultados
+de ese análisis, no información sobre identidades deportivas.</p>
+<h2>Modos y lectura</h2>
+<table>
+<thead>
+<tr>
+<th>Modo</th>
+<th>Material visible</th>
+<th>Alcance</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SurfaceScan</td>
+<td>Contornos de movimiento, trama y puntos dentro de personas admitidas.</td>
+<td>No es segmentación anatómica ni medida de superficie corporal.</td>
+</tr>
+<tr>
+<td>PlayerIDs</td>
+<td>Cajas y etiquetas temporales de personas admitidas.</td>
+<td>Un ID puede perderse o cambiar con oclusiones; no nombra a la persona.</td>
+</tr>
+<tr>
+<td>MotionTrails</td>
+<td>Estelas de posiciones y del candidato a balón cuando hay datos.</td>
+<td>Son coordenadas de imagen e incluyen efectos del movimiento de cámara.</td>
+</tr>
+<tr>
+<td>FieldMap</td>
+<td>Rejilla sobre el cuadrilátero de campo estimado.</td>
+<td>Necesita vídeo apaisado y geometría suficiente; no mide metros.</td>
+</tr>
+</tbody></table>
+<h2>Condiciones de detección</h2>
+<p>Se exige confianza de persona y apoyo de la zona de los pies sobre una región
+amplia de césped. El filtro es conservador: puede omitir figuras recortadas,
+planos sin superficie visible o imágenes cuyo color no permite inferirla.
+Árbitros y personal sobre el campo también pueden cumplir sus condiciones.</p>
+<p>Los clips cuyo nombre contiene <code>hinchada</code>, sin distinguir mayúsculas, quedan
+excluidos del seguimiento de jugadores. Si falta el modelo, la imagen necesaria
+para inferencia o la evidencia de superficie, no se utilizan manchas de
+movimiento como sustituto de personas.</p>
+<p>El seguimiento asocia detecciones y suaviza su presentación. Las estelas tienen
+historia limitada; se interrumpen ante saltos o falta de continuidad y se
+limpian al cambiar de clip. <code>FieldMap</code> muestra <strong>WAITING FOR GEOMETRY</strong> cuando
+no tiene las condiciones necesarias. La ausencia de marcas es un resultado
+posible del análisis, no por sí sola un fallo de reproducción.</p>
+<h2>Uso técnico</h2>
+<p>En <strong>Channel Editor</strong>, el selector <strong>SCORE</strong> permite elegir un modo. Para
+observarlo continuamente, el operador puede desactivar compositor y nube de
+puntos del canal, seleccionando así la ruta gráfica del vídeo. Devolver el
+selector a <strong>Auto</strong> restituye su selección automática y volver a habilitar
+compositor y nube restituye la programación de la instalación.</p>
+<p><strong>Trail seconds</strong> ajusta la duración de las estelas y <strong>Surface spacing</strong> la
+separación de trama. Son controles de sesión. La composición también selecciona
+estos materiales en capítulos de vídeo gráfico según sus paletas de modos.
+No se necesita intervenir en ellos durante una actividad de mediación.</p>
+<p>Los contornos, máscaras y trayectorias son representaciones parciales. La
+<a href="#como_funciona_es">guía pedagógica</a> ofrece preguntas para observarlas y
+<a href="#algoritmos_y_procesos_es">Algoritmos y procesos</a> explica sus cálculos.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="manual_diario_comandos_es" tabindex="-1"><p class="eyebrow">Instalación y sala</p><h1>Partitura del Juego — Manual diario</h1>
+<p>Guía de apertura, comprobación y cierre para el personal de sala. Utilizar
+siempre los lanzadores de la misma carpeta de instalación. Mantener abiertas
+las Terminales de audio y visual; se pueden minimizar.</p>
+<h2>Abrir la instalación</h2>
+<ol>
+<li><p>Encender el equipo de sala y comprobar las conexiones previstas por el museo.</p>
+</li>
+<li><p>Abrir <strong>Start Audio.command</strong>. Si DANTE está disponible se selecciona
+automáticamente. Si aparece un menú, escribir el número de salida y Enter.
+Si la sala necesita DANTE y no aparece, detener con Control+C y avisar al
+personal técnico.</p>
+</li>
+<li><p>Escuchar los avisos y responder a esta pregunta:</p>
+<pre><code class="language-text">Did you hear the ping? [y/n] then Enter:
+</code></pre>
+<p>Si se oye por la salida esperada, escribir <strong>y</strong> y Enter. Si no se oye,
+escribir <strong>n</strong> y Enter; revisar las indicaciones y salir con Control+C para
+corregir la conexión. Se utiliza <strong>y</strong>, no la letra s.</p>
+</li>
+<li><p>Esperar <strong>PDJ Datamatics — listening OSC UDP :9001</strong>. Con DANTE, escuchar
+la prueba de las ocho salidas y comprobar que llegan a la sala.</p>
+</li>
+<li><p>Abrir <strong>Start Visual.command</strong> una vez. Esperar la carga de la biblioteca.</p>
+</li>
+<li><p>Confirmar imágenes, orientación y sonido de la obra. El panel de control
+muestra <strong>Portrait: 48</strong> y <strong>Horizontal: 3</strong>.</p>
+</li>
+</ol>
+<p>El ping usa la salida de macOS: oírlo en el portátil no confirma las rutas de
+sala. La prueba posterior del motor comprueba las salidas una a una.</p>
+<p>Si el ordenador del recinto ya abre los lanzadores al iniciar sesión, continuar
+con las preguntas pendientes en Terminal. No iniciar componentes duplicados.
+El paquete se inicia mediante sus lanzadores; la apertura al iniciar sesión
+depende de la configuración del ordenador del museo.</p>
+<h2>Durante la jornada</h2>
+<p>Las pantallas alternan vídeo, generadores y respiraciones. También pueden
+converger, quedar escasas o atravesar una cesura. Un intervalo con poca
+actividad no demuestra por sí solo un fallo.</p>
+<p>Para ocultar o mostrar los controles, pulsar <strong>U</strong>. No cerrar la ventana de
+control durante la exposición: su cierre termina la presentación. Mantener
+el volumen y la disposición acordados con el personal técnico.</p>
+<h2>Si falta el audio</h2>
+<p>Revisar primero si Terminal está esperando una respuesta. Si el motor está
+iniciado, comprobar volumen, silenciamientos y amplificación con el técnico.
+<strong>Check Audio.command</strong> informa de los dispositivos; no inicia ni repara audio.</p>
+<p>Para reiniciar: pulsar <strong>Control+C</strong> en la Terminal de audio, esperar a que
+termine y abrir <strong>Start Audio.command</strong> una vez. Completar selección y prueba.
+El visual puede permanecer abierto. No iniciar <strong>Start Mix Desk.command</strong>
+sobre un motor en funcionamiento.</p>
+<h2>Si falta el visual o queda detenido</h2>
+<p>El lanzador permite tres minutos de carga antes de evaluar un bloqueo global.
+Para reiniciar manualmente, abrir <strong>Stop Visual.command</strong>, esperar el cierre
+incluida la Terminal visual y abrir <strong>Start Visual.command</strong> una vez.</p>
+<p>Si el problema se repite, anotar canal, nombre del vídeo, hora y mensaje de error.
+El <a href="#manual_es">manual de instalación</a> contiene el diagnóstico técnico.</p>
+<h2>Cerrar al final del día</h2>
+<ol>
+<li>Abrir <strong>Stop Visual.command</strong>. Esperar a que se cierren las ventanas; pulsar
+Enter cuando aparezca <strong>Press Return to close</strong>.</li>
+<li>Pulsar <strong>Control+C</strong> en la Terminal de Audio Launcher. Comprobar que cesa el
+sonido. La tecla es Control, no Command.</li>
+<li>Cerrar las Terminales que terminan y apagar el Mac según el procedimiento
+del recinto. Desconectar el sistema de audio después de detener su motor.</li>
+</ol>
+<p><strong>Stop Visual.command detiene solo el visual.</strong> El audio se detiene por separado.
+Si no responde a Control+C, acudir al personal técnico y al apartado de
+recuperación del <a href="#manual_es">manual de instalación</a>.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="manual_es" tabindex="-1"><p class="eyebrow">Instalación y sala</p><h1>Partitura del Juego — Manual de instalación y operación</h1>
+<p>Este manual describe el paquete de instalación de <code>dist/</code>: aplicación visual,
+vídeos y análisis, motor sonoro, SuperCollider y lanzadores. Está dirigido al
+personal técnico y de sala. Para preparar visitas educativas, consultar la
+<a href="#mediacion_museos_es">guía de mediación</a>.</p>
+<h2>1. Preparar el equipo</h2>
+<p>La aplicación se ejecuta en un Mac Apple Silicon. Para la presentación de sala
+se necesitan dos salidas de vídeo utilizables, dos controladores ICUIXIAN
+0104-XZ, ocho pantallas, su cableado y un sistema de audio conectado a las
+salidas previstas por el recinto. El montaje mixto utiliza cuatro pantallas
+verticales y cuatro horizontales.</p>
+<p>Para DANTE se necesita Ethernet, Dante Virtual Soundcard activo y con licencia,
+Dante Controller y las suscripciones de audio del recinto. Estos controladores
+se preparan en el ordenador; no forman parte del entorno SuperCollider incluido.
+Para una escucha estéreo se utiliza una salida disponible del Mac.</p>
+<p>SuperCollider está en <code>Runtime/SuperCollider.app</code>. No hace falta instalar
+openFrameworks, Python ni un entorno de desarrollo para ejecutar la entrega.
+Mantener alimentación, ventilación y los ajustes de energía de exposición que
+establezca el museo. Configurar las pantallas como escritorio extendido.</p>
+<h2>2. Contenido del paquete</h2>
+<p>Conservar toda la carpeta, con permiso de escritura y fuera del ZIP:</p>
+<pre><code class="language-text">Carpeta de Partitura del Juego/
+├── Partitura_del_Juego.app
+├── Start Audio.command
+├── Start Visual.command
+├── Stop Visual.command
+├── Start Mix Desk.command
+├── Check Audio.command
+├── README.md
+├── Documentacion/
+├── Videos/
+│   ├── Portrait/       48 vídeos y sus carpetas .pdjcv
+│   └── Horizontal/      3 vídeos y sus carpetas .pdjcv
+├── SuperCollider/      módulos de síntesis y mezcla
+├── Runtime/
+│   └── SuperCollider.app
+├── Support/            utilidades de dispositivos y configuración
+├── State/              estado y copias de ajustes creados por los lanzadores
+├── Source/
+│   ├── current-source.tgz
+│   └── source-manifest.json
+├── VERSION.txt
+└── PACKAGE_MANIFEST.json
+</code></pre>
+<p><code>Partitura_del_Juego.app</code> incluye shaders, modelo de detección y configuración
+inicial. Los vídeos están fuera de la aplicación. No mover solo la <code>.app</code> ni
+modificar sus recursos internos. <code>Source/</code> permite consultar el código; no es
+necesario descomprimirlo para ejecutar la instalación.</p>
+<table>
+<thead>
+<tr>
+<th>Lanzador</th>
+<th>Función</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Start Audio.command</code></td>
+<td>Selecciona salida, pide confirmar un aviso sonoro e inicia el motor.</td>
+</tr>
+<tr>
+<td><code>Start Visual.command</code></td>
+<td>Prepara rutas de vídeo e inicia la aplicación con vigilancia.</td>
+</tr>
+<tr>
+<td><code>Stop Visual.command</code></td>
+<td>Detiene la aplicación visual y su vigilante.</td>
+</tr>
+<tr>
+<td><code>Check Audio.command</code></td>
+<td>Informa de los dispositivos; no inicia el motor ni repara conexiones.</td>
+</tr>
+<tr>
+<td><code>Start Mix Desk.command</code></td>
+<td>Inicia el motor con la mesa de mezcla; se utiliza en lugar del lanzador de audio habitual.</td>
+</tr>
+</tbody></table>
+<p>Para detener el audio se usa <strong>Control+C</strong> en su Terminal. Los lanzadores de
+mezcla y de audio no deben iniciar dos motores simultáneos.</p>
+<h2>3. Primera apertura</h2>
+<ol>
+<li>Descomprimir el paquete y situar la carpeta completa en su ubicación de uso.</li>
+<li>Conectar pantallas y audio. Preparar DANTE si corresponde al montaje.</li>
+<li>Abrir los lanzadores desde esa carpeta. Si macOS pide autorización para la
+aplicación o los lanzadores, utilizar control-clic → Abrir y seguir su diálogo.</li>
+<li>Mantener las Terminales de audio y visual abiertas; se pueden minimizar.</li>
+</ol>
+<p>La aplicación tiene firma local. Las autorizaciones de macOS se gestionan en
+el equipo de instalación con el personal responsable.</p>
+<h2>4. Arranque y comprobación de audio</h2>
+<ol>
+<li><p>Abrir <strong>Start Audio.command</strong>.</p>
+</li>
+<li><p>Si aparece <strong>DANTE detected</strong>, el dispositivo se selecciona automáticamente.
+Si aparece <strong>No DANTE detected. Select audio output:</strong>, escribir el número
+de salida y pulsar Enter. Si el montaje requiere DANTE y no se detecta,
+detener con Control+C y revisar la conexión antes de continuar.</p>
+</li>
+<li><p>El lanzador reproduce dos avisos y pregunta:</p>
+<pre><code class="language-text">Did you hear the ping? [y/n] then Enter:
+</code></pre>
+<p>Escribir <strong>y</strong> y pulsar Enter si se escucha por la salida esperada.
+Escribir <strong>n</strong> si no se escucha. Se muestran indicaciones y se permite salir
+con Control+C para corregir la configuración. La respuesta afirmativa es
+la letra <strong>y</strong>, no la letra s.</p>
+</li>
+<li><p>Esperar el mensaje:</p>
+<pre><code class="language-text">PDJ Datamatics — listening OSC UDP :9001
+</code></pre>
+</li>
+<li><p>En DANTE, comprobar el mensaje <strong>8-channel DANTE output active</strong> y la prueba
+secuencial de las ocho salidas. Confirmar físicamente qué zona suena con cada
+canal; <strong>All 8 channels tested</strong> solo indica que terminó la secuencia.</p>
+</li>
+</ol>
+<p>El aviso inicial usa la salida de sonido de macOS. Oírlo en el portátil no
+confirma el enrutamiento hacia la sala. La prueba multicanal del motor permite
+comprobar las ocho rutas. Ver <a href="#audio_multichannel_es">Audio multicanal</a>.</p>
+<h2>5. Arranque visual y ajustes guardados</h2>
+<p>Abrir <strong>Start Visual.command</strong> cuando el audio está listo. La configuración
+inicial muestra ocho canales en una ventana de 1920×1080. La configuración
+personal guardada tiene prioridad sobre esos valores iniciales.</p>
+<p>Los ajustes están en:</p>
+<pre><code class="language-text">~/Library/Application Support/PartituraDelJuego/settings.json
+</code></pre>
+<p>El lanzador guarda una copia de los ajustes existentes en <code>State/</code> y prepara
+las rutas hacia <code>Videos/Portrait</code> y <code>Videos/Horizontal</code> del paquete. Conserva
+los demás valores. Después de mover la carpeta, volver a iniciar mediante el
+lanzador para que las rutas correspondan a la nueva ubicación.</p>
+<p>La ventana <strong>PDJ Control</strong> muestra <code>Portrait: 48</code> y <code>Horizontal: 3</code>. La carga
+inicial puede tardar; el vigilante concede tres minutos antes de evaluar un
+bloqueo global. No iniciar otra copia mientras carga.</p>
+<h2>6. Montaje de las ocho pantallas</h2>
+<table>
+<thead>
+<tr>
+<th>Muro</th>
+<th>Canales internos</th>
+<th>Controlador</th>
+<th>Distribución</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A</td>
+<td>0–3</td>
+<td>ICUIXIAN A</td>
+<td>Cuatro pantallas verticales, 4×1, rotación 90°.</td>
+</tr>
+<tr>
+<td>B</td>
+<td>4–7</td>
+<td>ICUIXIAN B</td>
+<td>Cuatro pantallas horizontales, 2×2, sin rotación.</td>
+</tr>
+</tbody></table>
+<p>Conectar la salida Thunderbolt/USB-C, mediante el adaptador correspondiente,
+a la entrada de A; conectar HDMI a la entrada de B. Cada controlador reparte
+sus cuatro salidas a las pantallas de su muro. La señal de entrada prevista
+es 1920×1080 a 60 Hz; el tamaño de cada segmento no equivale a la resolución
+física completa de su panel.</p>
+<p>En <strong>PDJ Control</strong>, usar <strong>Configure Mixed Wall (4V + 2x2H)</strong> para el montaje
+mixto. <strong>Enable dual output</strong> activa el modo de dos ventanas. Si aparece
+<strong>Restart required</strong>, detener con <strong>Stop Visual.command</strong> y volver a iniciar
+con <strong>Start Visual.command</strong>. El audio puede permanecer funcionando.</p>
+<p>Usar <strong>Identify A</strong>, <strong>Identify B</strong> o <strong>Identify both</strong> para comprobar muro,
+canal y salida física. <strong>Swap A/B</strong> intercambia la asignación de los muros.
+Comprobar la orientación con las marcas visibles y ajustar la rotación del
+controlador si el panel queda invertido.</p>
+<p><strong>Configure ICUIXIAN outputs (4V + 4V)</strong> corresponde a dos muros de retratos;
+no es el ajuste del montaje mixto descrito aquí.</p>
+<h2>7. Controles durante la operación</h2>
+<table>
+<thead>
+<tr>
+<th>Panel</th>
+<th>Uso</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Overview</td>
+<td>Comprobar canales, reproducción y clips; acceder a Next, Play/Pause y Stop por canal.</td>
+</tr>
+<tr>
+<td>Global Director</td>
+<td>Activar cámara lenta, avance rápido y clear; habilitar sus disparos automáticos.</td>
+</tr>
+<tr>
+<td>Video Director</td>
+<td>Ajustar selección de fragmentos y solicitar un acontecimiento compartido.</td>
+</tr>
+<tr>
+<td>Visual Composer</td>
+<td>Consultar forma, sección, momento, organización y paleta; intervenir en la composición.</td>
+</tr>
+<tr>
+<td>Channel Editor</td>
+<td>Ajustar vídeo, nube de puntos, imagen, visión y modo de partitura por canal.</td>
+</tr>
+<tr>
+<td>Performance</td>
+<td>Medir funcionamiento y exportar informes.</td>
+</tr>
+<tr>
+<td>Analisis</td>
+<td>Preparar los datos de una biblioteca de vídeos.</td>
+</tr>
+</tbody></table>
+<p>La barra superior incluye volumen maestro, configuración OSC y controles de
+salida. La tecla <strong>U</strong> oculta o muestra la interfaz. Cerrar normalmente la
+ventana de control cierra la presentación; para el cierre diario se recomienda
+el lanzador <strong>Stop Visual.command</strong>.</p>
+<p><strong>Hide H-wall video</strong> retira el vídeo de los canales horizontales y permite
+mantener generadores en ese muro. No apaga físicamente las pantallas.</p>
+<p>Los controles de sesión no tienen todos la misma persistencia. Guardar la
+paleta mediante <strong>Save palette settings</strong> cuando se quiere conservarla.
+<strong>Trail seconds</strong> y <strong>Surface spacing</strong> ajustan la sesión de los overlays.
+El personal de mediación puede desarrollar sus actividades sin intervenir en
+estos controles.</p>
+<h2>8. Comprobación de apertura al público</h2>
+<ul>
+<li>Confirmar 48 clips verticales y 3 horizontales en la interfaz.</li>
+<li>Comprobar imagen, orientación y orden de las ocho pantallas.</li>
+<li>Escuchar la salida de cada ruta DANTE durante la prueba y después el sonido
+de la obra con el visual en ejecución.</li>
+<li>Comprobar que los canales presentan actividad y cambian de material con el
+tiempo; una respiración, una cesura o un generador pueden mostrar poca actividad.</li>
+<li>Dejar las Terminales abiertas y anotar la ubicación del paquete y los ajustes
+del recinto en el registro de sala.</li>
+</ul>
+<p>La <a href="#partitura_sonora_es">partitura sonora visible</a> ayuda a observar tres
+capas de audio, pero no sustituye la escucha de las salidas físicas.</p>
+<h2>9. Cierre diario</h2>
+<ol>
+<li>Abrir <strong>Stop Visual.command</strong>. Esperar a que desaparezcan las ventanas y
+pulsar Enter cuando aparezca <strong>Press Return to close</strong>.</li>
+<li>En la Terminal de Audio Launcher, pulsar <strong>Control+C</strong>. Comprobar que cesa
+el audio. Si se utiliza la mesa de mezcla, detener su Terminal del mismo modo.</li>
+<li>Cerrar las Terminales que terminan y apagar el ordenador según el procedimiento
+del recinto. Detener el audio antes de desconectar su dispositivo o la red.</li>
+</ol>
+<p><strong>Stop Visual.command solo detiene el visual.</strong> No detiene el motor de sonido
+ni apaga el Mac.</p>
+<h2>10. Recuperación y diagnóstico</h2>
+<table>
+<thead>
+<tr>
+<th>Situación</th>
+<th>Comprobación y acción</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>El audio parece no iniciar</td>
+<td>Revisar si Terminal espera el número de salida o la respuesta al ping.</td>
+</tr>
+<tr>
+<td>DANTE no aparece</td>
+<td>Detener audio; abrir Check Audio.command; revisar DVS, Ethernet y las suscripciones con el técnico.</td>
+</tr>
+<tr>
+<td>El ping suena en el Mac, no en sala</td>
+<td>Revisar la salida del sistema y después la prueba de ocho canales del motor.</td>
+</tr>
+<tr>
+<td>Hay imagen pero no sonido</td>
+<td>Revisar salida, volumen maestro, silenciamientos, amplificación y que el motor escuche en 9001.</td>
+</tr>
+<tr>
+<td>El visual no aparece</td>
+<td>Dar margen a la carga; comprobar permisos y que toda la carpeta esté presente.</td>
+</tr>
+<tr>
+<td>Un canal queda detenido</td>
+<td>Distinguir pausa o material escaso de una detención; anotar canal, clip y hora.</td>
+</tr>
+<tr>
+<td>Se necesita reiniciar el visual</td>
+<td>Abrir Stop Visual.command, esperar a que termine su Terminal y abrir Start Visual.command una vez.</td>
+</tr>
+<tr>
+<td>Se necesita reiniciar el audio</td>
+<td>Control+C en su Terminal, esperar y abrir Start Audio.command una vez.</td>
+</tr>
+<tr>
+<td>El análisis no muestra personas</td>
+<td>Revisar el tipo de imagen y la evidencia de campo; la ausencia de marcas puede ser una condición del análisis.</td>
+</tr>
+</tbody></table>
+<p>El vigilante visual relanza la aplicación tras una caída o una pérdida
+prolongada de su pulso, respetando el margen inicial. Un cierre normal se
+respeta. La vigilancia de cada reproductor distingue pausas solicitadas de
+falta inesperada de imágenes y puede solicitar otro clip.</p>
+<p>Si se pierde la Terminal de audio o no responde, el personal técnico puede
+cerrar los procesos de SuperCollider en el Mac dedicado a la obra:</p>
+<pre><code class="language-sh">pkill -TERM -x sclang
+pkill -TERM -x scsynth
+</code></pre>
+<p>Estas órdenes afectan a todas las sesiones de SuperCollider de ese usuario.
+No utilizarlas si el equipo mantiene otra sesión que deba conservarse. Guardar
+el error y la hora si el fallo se repite.</p>
+<h2>11. Biblioteca y documentación</h2>
+<p>La entrega contiene los vídeos y sus carpetas <code>.pdjcv</code>. No separar esas parejas.
+Para preparar otra biblioteca, seguir <a href="#offline_analysis_es">Análisis de la biblioteca</a>.
+No iniciar el análisis durante la apertura al público: comparte recursos con
+la reproducción.</p>
+<p><a href="#manual_diario_comandos_es">Manual diario</a> reúne las acciones de cada jornada.
+<a href="#como_funciona_es">Cómo funciona la partitura</a> y la
+<a href="#mediacion_museos_es">guía de mediación</a> apoyan al equipo educativo.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="audio_multichannel_es" tabindex="-1"><p class="eyebrow">Instalación y sala</p><h1>Partitura del Juego — Audio y distribución espacial</h1>
+<p>Guía del motor incluido en <code>SuperCollider/</code> y del entorno
+<code>Runtime/SuperCollider.app</code>. Para las acciones diarias, consultar el
+<a href="#manual_diario_comandos_es">manual diario</a>.</p>
+<h2>1. Recorrido de la señal</h2>
+<pre><code class="language-text">Aplicación visual → mensajes OSC → SuperCollider → dispositivo de audio
+    → salidas estéreo o red DANTE → amplificación → altavoces
+</code></pre>
+<p>OSC transmite parámetros, no audio. El motor escucha en UDP <strong>9001</strong>;
+la aplicación recibe respuestas en <strong>9002</strong> según la configuración incluida.
+El motor genera voces, pulsos, texturas, subgraves y acentos, los articula con
+el estado compositivo y los envía a la mezcla.</p>
+<p>Un canal visual es una fuente de información y composición. No equivale a un
+altavoz exclusivo: su contribución puede distribuirse entre varias salidas.</p>
+<h2>2. Iniciar el motor</h2>
+<p>Abrir <strong>Start Audio.command</strong> desde la carpeta de entrega. El lanzador consulta
+los dispositivos, selecciona DANTE si lo detecta y ofrece un menú de salida
+cuando corresponde a estéreo. Reproduce un ping y solicita <strong>y/n + Enter</strong>.
+El ping utiliza la salida del sistema operativo, que puede ser distinta de
+la elegida para el motor.</p>
+<p>Esperar <strong>PDJ Datamatics — listening OSC UDP :9001</strong>. En DANTE se realiza una
+prueba secuencial; comprobar físicamente el destino de cada salida. El mensaje
+<strong>All 8 channels tested</strong> confirma que terminó la secuencia, no la escucha.
+Después abrir el visual para recibir los controles de la obra.</p>
+<p>El entorno de sonido está incluido. El paquete utiliza salida de audio y no
+analiza un micrófono del público. Las autorizaciones que solicite macOS se
+resuelven en el ordenador con el personal responsable.</p>
+<h2>3. Preparar DANTE</h2>
+<p>El técnico del recinto prepara Dante Virtual Soundcard, su licencia, la conexión
+Ethernet y Dante Controller. Activar el dispositivo y utilizar <strong>48 kHz</strong>, en
+coherencia con los receptores de sala. El motor abre el número de salidas
+anunciado por DVS y utiliza ocho para la obra; los valores de su configuración
+incluida son bloque de 512 y búfer de hardware de 512 muestras en DANTE.</p>
+<p>En Dante Controller, asociar las ocho rutas de la obra con las entradas del
+sistema de amplificación. Confirmar el desplazamiento de salida indicado por
+el motor si existe una configuración específica. Con el desplazamiento cero,
+las rutas corresponden a DVS 1–8.</p>
+<table>
+<thead>
+<tr>
+<th>Ruta de la obra</th>
+<th>Comprobación en sala</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Identificar receptor y zona física durante su tono.</td>
+</tr>
+</tbody></table>
+<p>Registrar la correspondencia real del recinto. No deducir el orden físico solo
+por el número de pantalla. Una ruta puede alimentar más de un altavoz según el
+sistema de amplificación del museo.</p>
+<h2>4. Escucha estéreo</h2>
+<p>Sin DANTE, el lanzador permite seleccionar un dispositivo estéreo disponible.
+El motor utiliza panoramización izquierda/derecha. Esta escucha permite revisar
+material, continuidad y mezcla; no reproduce la distribución espacial de ocho
+salidas.</p>
+<p>Si la instalación necesita DANTE y el dispositivo no aparece, detener el
+arranque y revisar la conexión. No tomar una escucha correcta en el portátil
+como comprobación del montaje de sala.</p>
+<h2>5. Espacialización DBAP</h2>
+<p>DBAP calcula ganancias según la distancia entre una fuente virtual y las
+posiciones de altavoces configuradas. La posición depende de datos geométricos
+y decisiones compositivas. Un parámetro regula la caída con la distancia y
+otro añade dispersión. La implementación normaliza las ganancias mediante RMS.</p>
+<p>Las coordenadas <code>~speakerPositions</code> de <code>pdj_datamatics.scd</code> representan el plano
+de la sala entre 0 y 1. Deben concordar con la posición y el orden de las salidas
+físicas del montaje. El técnico puede revisarlas en ese archivo externo a la
+aplicación y reiniciar el audio. Escuchar la prueba y recorrer la sala después
+de cualquier ajuste.</p>
+<p><a href="#algoritmos_y_procesos_es">Algoritmos y procesos</a> explica el cálculo y sus
+límites. La espacialización no es una medida de la posición física de los
+jugadores ni de las personas visitantes.</p>
+<h2>6. Mezcla</h2>
+<p><strong>Start Mix Desk.command</strong> inicia el motor con su interfaz de mezcla. Es una
+alternativa a <strong>Start Audio.command</strong>: detener el motor activo antes de usarla.
+La mesa permite ajustar niveles y guardar mediante <strong>Save installation mix</strong>.
+Su opción de OSC sintético sirve para audicionar; durante la obra se utilizan
+los datos de la aplicación visual.</p>
+<p>La mezcla del usuario está en:</p>
+<pre><code class="language-text">~/Library/Application Support/PartituraDelJuego/audio_mix.scdcfg
+</code></pre>
+<p>El archivo de mezcla incluido en <code>SuperCollider/</code> proporciona valores del
+paquete. El volumen maestro también se controla desde <strong>PDJ Control</strong>; el
+ajuste visual de volumen está en <code>settings.json</code>. La configuración inicial
+incluye un valor maestro de 0,55. El nivel apropiado en sala se establece
+escuchando el sistema de amplificación y las condiciones del museo.</p>
+<h2>7. Archivos y funciones</h2>
+<table>
+<thead>
+<tr>
+<th>Archivo o grupo en <code>SuperCollider/</code></th>
+<th>Función</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>pdj_launcher.scd</code></td>
+<td>Prepara el arranque, carga el motor y muestra estado y prueba de salida.</td>
+</tr>
+<tr>
+<td><code>pdj_audio_config.scd</code></td>
+<td>Selección de dispositivo y opciones del servidor.</td>
+</tr>
+<tr>
+<td><code>pdj_datamatics.scd</code></td>
+<td>Control OSC, estados, síntesis, espacialización y mezcla.</td>
+</tr>
+<tr>
+<td><code>pdj_mode_voices.scd</code></td>
+<td>Vocabulario de voces asociado a materiales visuales.</td>
+</tr>
+<tr>
+<td><code>pdj_palette_voices.scd</code>, <code>pdj_ember_voices.scd</code>, <code>pdj_world_voices.scd</code></td>
+<td>Tratamientos y materiales de los mundos sonoros.</td>
+</tr>
+<tr>
+<td><code>pdj_video_phrases.scd</code>, <code>pdj_functional_material.scd</code></td>
+<td>Articulación sonora de capítulos de vídeo y su material.</td>
+</tr>
+<tr>
+<td><code>pdj_mix_config.scd</code>, <code>pdj_mix_desk.scd</code></td>
+<td>Persistencia e interfaz de mezcla.</td>
+</tr>
+<tr>
+<td><code>pdj_volumetric_compat.scd</code></td>
+<td>Compatibilidad de mensajes de la ruta volumétrica.</td>
+</tr>
+<tr>
+<td><code>data_matrix_functional_study.scd</code></td>
+<td>Estudio incluido en la carpeta; no se inicia con la operación habitual.</td>
+</tr>
+<tr>
+<td><code>audio_mix.scdcfg</code>, <code>audio_mix.default.json</code></td>
+<td>Recursos de configuración de mezcla.</td>
+</tr>
+</tbody></table>
+<p>El lanzador carga las dependencias del motor. El personal de sala no necesita
+abrir ni evaluar estos archivos individualmente.</p>
+<h2>8. Diagnóstico y cierre</h2>
+<table>
+<thead>
+<tr>
+<th>Síntoma</th>
+<th>Acción</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Terminal parece detenida</td>
+<td>Revisar el menú de salida y la pregunta del ping.</td>
+</tr>
+<tr>
+<td>DANTE no se detecta</td>
+<td>Consultar Check Audio.command; revisar DVS, Ethernet y dispositivo activo.</td>
+</tr>
+<tr>
+<td>Hay prueba local pero no audio de sala</td>
+<td>Revisar suscripciones, frecuencia de muestreo, amplificación y silenciamientos.</td>
+</tr>
+<tr>
+<td>No hay respuesta a la imagen</td>
+<td>Comprobar que el visual está activo, OSC apunta a localhost:9001 y no hay un segundo motor.</td>
+</tr>
+<tr>
+<td>La salida se interrumpe</td>
+<td>Conservar mensajes y revisar dispositivo, conexión y carga con el técnico.</td>
+</tr>
+<tr>
+<td>La franja sonora tiene actividad pero no se oye</td>
+<td>Revisar toda la ruta física: la franja mide señal digital, no el altavoz.</td>
+</tr>
+</tbody></table>
+<p>Para cerrar, detener el visual con su lanzador y el audio con <strong>Control+C</strong> en
+su Terminal. Confirmar que cesa antes de desactivar DVS o desconectar el equipo.
+La recuperación técnica de procesos está en el <a href="#manual_es">manual</a>.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article>
+<article id="offline_analysis_es" tabindex="-1"><p class="eyebrow">Instalación y sala</p><h1>Preparar el análisis de la biblioteca</h1>
+<p>El paquete contiene 48 vídeos verticales y 3 horizontales, cada uno junto a su
+carpeta de análisis <code>.pdjcv</code>. Para utilizar esos medios basta iniciar el visual
+con su lanzador. Este procedimiento permite preparar los datos cuando se
+incorporan o modifican vídeos.</p>
+<h2>Analizar una carpeta</h2>
+<ol>
+<li>En <strong>PDJ Control</strong>, abrir <strong>Analisis</strong>.</li>
+<li>Pulsar <strong>Elegir carpeta de videos</strong> o <strong>Usar biblioteca actual</strong>. La búsqueda
+de análisis admite MP4, MOV y M4V, también en subcarpetas.</li>
+<li>Comprobar que la carpeta tiene permiso de escritura y pulsar
+<strong>Analizar biblioteca / Continuar pendientes</strong>.</li>
+<li>Seguir progreso, errores y vídeos completados. Realizarlo fuera del horario
+de exposición: comparte recursos con reproducción y dibujo.</li>
+<li>Conservar cada vídeo con su carpeta de resultados. Por ejemplo:
+<code>partido.mp4</code> y <code>partido.mp4.pdjcv/</code>.</li>
+</ol>
+<p>Seleccionar una carpeta de análisis no cambia la biblioteca de reproducción
+ni copia los vídeos. La reproducción del paquete utiliza <code>Videos/Portrait</code> y
+<code>Videos/Horizontal</code>. Conservar formatos y distribución adecuados a esas
+bibliotecas; el escáner de reproducción admite MP4, MOV y AVI en sus carpetas.
+No confundir las extensiones del escáner de análisis con las de reproducción.</p>
+<p><strong>Cancelar analisis</strong> conserva resultados completos. Al continuar, se omiten
+los análisis compatibles terminados y se procesa desde el inicio cada vídeo
+incompleto. Los errores no se publican como resultados terminados.</p>
+<h2>Qué contienen los resultados</h2>
+<p>El proceso muestrea el vídeo para calcular detección de personas, filtro de
+superficie, seguimiento, movimiento y contornos. Guarda tiempos del vídeo,
+índice y datos; no necesita incluir fotogramas dentro de la caché. Las marcas
+de tiempo son la referencia, no una frecuencia uniforme supuesta.</p>
+<p>Durante la reproducción, la aplicación consulta el análisis e interpola
+posiciones de identificadores coincidentes. Con resultados compatibles evita
+repetir la red neuronal y el flujo óptico. La decodificación, el dibujo y
+algunas máscaras de los tratamientos gráficos trabajan durante la ejecución.
+El panel indica <strong>analisis guardado</strong> en los canales que utilizan esa ruta.</p>
+<h2>Trasladar o modificar medios</h2>
+<p>Copiar juntos vídeo y <code>.pdjcv</code>. La comprobación de compatibilidad utiliza
+tamaño y muestras del contenido, no un examen de todos los bytes. Recortar o
+recodificar requiere analizar de nuevo. Un nombre que incluya <code>hinchada</code>
+implica exclusión de seguimiento de jugadores y puede invalidar resultados
+que admiten personas.</p>
+<p>Si faltan datos compatibles o se produce un error al leerlos, el canal puede
+utilizar análisis en vivo. Los <a href="#cv_overlays_es">límites de detección</a> se
+aplican también a los datos guardados. <code>.pdjcv</code> es la caché de esta aplicación;
+los paquetes PDJV pertenecen a otra ruta de datos y no son intercambiables.</p>
+<footer>Partitura del Juego · Documentación para el museo</footer></article></main></div>
+<script>
+const articles=[...document.querySelectorAll('article')];
+function show(focus){const key=location.hash.slice(1);const selected=articles.find(a=>a.id===key)||articles[0];articles.forEach(a=>a.hidden=a!==selected);document.querySelectorAll('nav a').forEach(a=>{if(a.hash==='#'+selected.id)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});document.title=selected.querySelector('h1').textContent+' · Guías del museo';if(focus){selected.focus({preventScroll:true});window.scrollTo(0,0)}}
+addEventListener('hashchange',()=>show(true));show(false);document.getElementById('print').addEventListener('click',()=>window.print());
+</script></body></html>

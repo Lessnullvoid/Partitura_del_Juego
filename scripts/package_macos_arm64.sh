@@ -90,7 +90,7 @@ if test -f "$ROOT/supercollider/pdj_volumetric_compat.scd"; then
     cp "$ROOT/supercollider/pdj_volumetric_compat.scd" \
         "$STAGE_DIR/SuperCollider/"
 fi
-cp "$ROOT/distribution/README-macOS-test.md" "$STAGE_DIR/README.md"
+python3 "$ROOT/scripts/package_documentation.py" "$ROOT" "$STAGE_DIR"
 cat > "$STAGE_DIR/Start Audio.command" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail

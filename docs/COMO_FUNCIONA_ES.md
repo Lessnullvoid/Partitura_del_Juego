@@ -1,368 +1,173 @@
 # Cómo funciona Partitura del Juego
 
-Esta guía explica la obra desde la experiencia del público hasta las reglas que
-la producen. No hace falta saber programar ni leer música. Para montar y operar
-la instalación, consultar el [manual](MANUAL_ES.md).
+Esta guía acompaña la visita a la instalación y el trabajo educativo del museo.
+Se puede leer antes de entrar, consultar después de la experiencia o utilizar
+como apoyo para una conversación. No requiere saber programar ni leer música.
 
-**Alcance:** los apartados 1–9 describen la base de ocho canales publicada en
-GitHub. Las ampliaciones de la copia de trabajo del 22 de septiembre de 2026
-—forma de siete secciones, detección de personas, caché de análisis, paletas y
-visor sonoro— se explican por separado en
-[La edición de trabajo](EDICION_DE_TRABAJO_ES.md). Su documentación no implica
-que estén incluidas en el código público o en un paquete descargado anterior.
+## Una partitura que se ve y se escucha
 
-## 1. Qué significa «partitura» en esta obra
+En una partitura musical, unas indicaciones organizan sonidos en el tiempo.
+En *Partitura del Juego*, las indicaciones organizan también imágenes: cuándo
+aparece un cuerpo, cuánto permanece una textura, cómo recorre un pulso las
+pantallas o en qué momento el conjunto deja un espacio vacío.
 
-Una partitura organiza materiales en el tiempo: indica qué aparece, cuánto
-dura, cómo cambia y cómo se relaciona con lo demás. Aquí esos materiales son
-vídeos deportivos, puntos, líneas, números, pulsos, ruido y sonidos sostenidos.
-La partitura está escrita como reglas que el ordenador interpreta durante la
-función. El resultado audiovisual se construye mientras lo vemos y escuchamos.
+La obra utiliza vídeos deportivos pregrabados. El ordenador mide cambios y
+movimiento en las imágenes y los transforma en líneas, cifras, puntos y
+sonidos. A la vez, sigue reglas compositivas que ordenan esas transformaciones.
+Cada ejecución combina organización, datos del vídeo y selecciones variables.
 
-El vídeo aporta un acontecimiento ya registrado. El programa mide cambios de
-imagen y movimiento; después utiliza esas medidas dentro de una composición.
-Por eso una carrera puede alimentar una textura, una distribución de cuerpos
-puede desplazar el sonido y varias pantallas pueden reunirse en un mismo pulso.
-Las relaciones dependen del material y del estado compositivo activo.
+El título permite pensar el juego como partido, movimiento y acto de reproducir.
+Los cuerpos filmados se convierten en materia de una composición que excede
+el acontecimiento deportivo.
 
-Conviene distinguir tres usos de la palabra:
-
-| Nombre | Qué significa |
-|---|---|
-| Partitura de la instalación | Las reglas de duración, contraste, coordinación y transformación del conjunto. |
-| Partitura gráfica (`GraphicScore`) | Los tratamientos que convierten un vídeo en líneas, cifras, cajas, barras o imagen procesada. |
-| Partitura sonora visible | Un visor de actividad de audio de la edición de trabajo; se explica en el documento complementario. |
-
-**Generativo** significa que las reglas producen variaciones durante la
-ejecución. **Reactivo** significa que algunas de esas variaciones responden a
-datos del vídeo. La obra combina ambas cosas: tiene organización propia y
-también escucha, mediante mediciones, lo que sucede en las imágenes.
-
-## 2. El recorrido completo
+## Del vídeo a la sala
 
 ```mermaid
-flowchart TD
-    A["Biblioteca de vídeos deportivos"] --> B["Elegir clip y fragmento"]
-    B --> C["Reproducir y medir la imagen"]
-    C --> D["Movimiento, regiones y eventos estimados"]
-    D --> E["Compositor: material, duración y relaciones"]
-    E --> F["Vídeo tratado o generador visual"]
-    D --> F
-    C --> F
-    E --> G["Mensajes de control OSC"]
-    D --> G
-    G --> H["Síntesis y distribución espacial del sonido"]
-    F --> I["Ocho pantallas"]
-    H --> J["Altavoces de sala"]
+flowchart LR
+    A["Un fragmento deportivo"] --> B["Medir la imagen"]
+    B --> C["Organizar los materiales"]
+    C --> D["Dibujar y producir sonido"]
+    D --> E["Ver y escuchar relaciones en la sala"]
 ```
 
-Los pasos del dibujo se repiten continuamente y se solapan. El análisis puede
-trabajar sobre una imagen reducida mientras la tarjeta gráfica dibuja la salida.
-El motor sonoro recibe números de control; OSC no transporta aquí el vídeo ni
-la señal de audio. SuperCollider produce el sonido a partir de esos controles.
+Primero se elige un clip y un tramo de reproducción. El análisis aporta cambios
+de brillo, desplazamientos y posiciones estimadas. La composición decide qué
+material presenta cada pantalla y durante cuánto tiempo. El programa visual
+dibuja las imágenes y comunica datos al motor de sonido, que produce y
+distribuye el audio entre las salidas de la sala.
 
-Un **canal** es una parte de la composición con su propio estado. Hay ocho
-canales visuales, numerados internamente de 0 a 7. Comparten directores y reloj,
-pero pueden mostrar materiales distintos. Las ventanas A y B agrupan cuatro
-canales cada una y los controladores de vídeo los distribuyen a las pantallas.
-Un canal visual tampoco equivale a un altavoz: su sonido puede repartirse por
-varias salidas de audio.
+Parte del análisis se prepara con antelación y se consulta siguiendo el tiempo
+del vídeo. La composición y el dibujo se desarrollan durante la ejecución.
 
-## 3. Cómo se elige el vídeo
+## Qué puede observar el ordenador
 
-La biblioteca separa clips verticales y horizontales. `ClipPool` intenta elegir
-un vídeo que no esté siendo usado por otro canal del mismo grupo y que ese
-canal no haya reproducido recientemente. Si quedan muy pocos candidatos,
-relaja restricciones para poder continuar.
+Podemos mirar un partido y reconocer intenciones, reglas o nombres. El sistema
+trabaja con información más acotada:
 
-`VideoDirector` decide cómo recorrer el clip:
-
-| Plan | Qué hace | Efecto compositivo |
+| Pregunta del análisis | Qué obtiene | Qué conviene recordar |
 |---|---|---|
-| Fragmento corto | Elige un tramo breve dentro del clip. | Introduce cortes y cambios de atención. |
-| Fragmento largo | Mantiene el material durante más tiempo. | Permite reconocer y seguir un movimiento. |
-| Vídeo completo | Recorre el clip completo. | Conserva un arco temporal más largo. |
+| ¿Cuánto cambia la imagen? | Una medida de diferencia entre imágenes. | Un corte o un cambio de luz también cuentan. |
+| ¿Hacia dónde parece desplazarse? | Una estimación de movimiento. | El movimiento de la cámara influye en el resultado. |
+| ¿Dónde hay personas sobre la superficie de juego? | Cajas de localización y etiquetas temporales. | Una etiqueta sigue una detección; no nombra a una persona. |
+| ¿Cómo se distribuyen las detecciones? | Proximidades, agrupaciones y trayectorias. | Son relaciones de imagen, no distancias medidas sobre la cancha. |
 
-Los pesos de los planes y los rangos de duración son configurables. Un peso es
-una preferencia de selección, no una obligación de ocupar ese porcentaje del
-tiempo total. Un fragmento largo puede ocupar más tiempo aunque se elija menos.
+La detección de personas necesita un modelo y evidencia de superficie de juego.
+Si falta esa evidencia, las marcas pueden desaparecer. Su ausencia no demuestra
+que no haya personas: también expresa límites de la observación.
 
-También existen acontecimientos compartidos: el director prepara los canales
-participantes, espera su disponibilidad y utiliza una referencia temporal
-común. Esa coordinación se distingue de que dos pantallas coincidan por azar.
-Los grupos pueden seguir teniendo bibliotecas de orientación distinta.
+«Colisión» y «balón» son hipótesis basadas en geometría, tamaño, movimiento y
+continuidad. La obra no decide si hay una falta ni lleva el marcador del partido.
 
-## 4. Qué se mide y qué significan los datos
+## Tres maneras de construir una imagen
 
-La visión por ordenador transforma imágenes en medidas. En la base publicada,
-las regiones detectadas son **blobs**: manchas de primer plano que pueden
-corresponder a cuerpos, sombras, fragmentos de un cuerpo u otros cambios. Una
-etiqueta de seguimiento enlaza una región entre imágenes próximas; no identifica
-a un deportista por su nombre ni garantiza reconocerlo tras un corte de cámara.
+**Transformar el vídeo.** Una cuadrícula traduce brillo a números; los bordes
+se convierten en líneas; las detecciones se marcan con cajas. El vídeo aporta
+una estructura que el tratamiento permite mirar de otra manera.
 
-### 4.1 Preparar la imagen
+**Dibujar con reglas.** Los generadores producen matrices, barridos, pulsos,
+campos de líneas y ruido. Sus parámetros cambian con la composición y pueden
+recibir medidas del análisis. Una imagen geométrica participa de la partitura
+aunque no permita reconocer el deporte de origen.
 
-El análisis utiliza una copia reducida, la convierte a gris y puede mejorar su
-contraste. El detalle destinado a la pantalla sigue una ruta de dibujo propia.
-Reducir la imagen ahorra trabajo, pero también hace menos visibles objetos
-pequeños. La resolución efectiva depende de la configuración y de las etapas de
-reducción; no debe confundirse con la resolución física de la pantalla.
+**Construir un relieve de puntos.** El programa toma muestras del vídeo y las
+sitúa en una nube de puntos. El brillo puede determinar su profundidad. La
+sensación de volumen es una transformación visual; no constituye por sí misma
+una medición tridimensional del cuerpo o del campo.
 
-### 4.2 Energía de movimiento: cuánto ha cambiado
+El tratamiento «térmico» utiliza intensidad y color; no mide temperatura.
+`Waveform` representa un historial de cambio visual, no la onda sonora.
 
-El programa resta dos imágenes consecutivas, toma el valor absoluto de cada
-diferencia y calcula su media:
+## Cómo se organiza el tiempo
 
-```text
-energía = media(|gris_actual − gris_anterior|) / 255
-```
+Un pulso es un acontecimiento breve. Un capítulo permite que un material
+aparezca, se desarrolle, se transforme y se retire de una pantalla. Una sección
+organiza un tramo más largo del conjunto.
 
-El resultado se sitúa entre 0 y 1. Por ejemplo, una diferencia media de 12,75
-niveles de gris produce 0,05. Esto mide cambio de imagen: un paneo de cámara,
-un corte de montaje o una variación de luz también pueden aumentarlo. No es
-una medida de esfuerzo físico ni de velocidad deportiva.
-
-### 4.3 Flujo óptico: hacia dónde parece moverse la imagen
-
-Farneback estima pequeños desplazamientos entre imágenes. El código obtiene
-el vector medio del campo y calcula su longitud y su ángulo:
-
-```text
-vector_medio = promedio de los vectores de desplazamiento
-magnitud = longitud(vector_medio)
-dirección = atan2(vector_medio.y, vector_medio.x)
-```
-
-Es la **longitud del vector medio**, no la media de todas las longitudes. Si
-media imagen se mueve a la derecha y la otra mitad a la izquierda, los vectores
-pueden cancelarse y dar una magnitud pequeña aunque haya mucho movimiento.
-Por eso flujo y energía son medidas complementarias. El flujo no está expresado
-en metros por segundo y depende del tamaño y del intervalo de las imágenes.
-
-### 4.4 Fondo, contornos y seguimiento
-
-MOG2 mantiene un modelo estadístico del aspecto habitual de cada zona de la
-imagen. Marca como primer plano lo que se separa de ese modelo. El buscador de
-contornos agrupa regiones y calcula posición, área y caja envolvente. El
-seguimiento relaciona detecciones próximas entre fotogramas.
-
-Las posiciones se normalizan: `(0, 0)` corresponde al extremo superior
-izquierdo y `(1, 1)` al inferior derecho de la imagen de análisis. Así pueden
-utilizarse sin depender directamente del número de píxeles del monitor. El
-área de los blobs, en cambio, se maneja en píxeles del análisis; no es un área
-real sobre la cancha.
-
-Canny extrae bordes a partir de cambios de intensidad. Un borde no es
-necesariamente el contorno de una persona: también puede ser una línea de
-campo, una letra o una grada. Los tratamientos gráficos utilizan estas
-estructuras como material visual.
-
-### 4.5 Eventos: hipótesis útiles para componer
-
-| Dato | Regla de la base publicada | Cómo interpretarlo |
-|---|---|---|
-| `collision` | Solapamiento de cajas o caída brusca del número de blobs. | Posible encuentro o fusión visual; no confirma contacto físico. |
-| `ballDetected` | Región pequeña cuya velocidad supera un umbral. | Candidato a balón; otros objetos pueden cumplir la regla. |
-| `crowdDensity` | Busca el mayor grupo de regiones próximas y normaliza su tamaño. | Concentración en la imagen; no un recuento exacto del público. |
-| `legDistance` | Calcula una proporción de altura y área de las regiones. | Proxy de elongación; el nombre no significa que mida la distancia entre piernas. |
-
-El solapamiento usa IoU: área de intersección de dos cajas dividida entre el
-área de su unión. Las reglas convierten mediciones en señales compositivas,
-pero la obra no arbitra el partido ni reconoce su resultado.
-
-## 5. Cómo las medidas se convierten en decisiones
-
-### 5.1 Quién decide cada cosa
-
-| Componente | Pregunta que resuelve |
+| Sección | Una forma de escucharla y observarla |
 |---|---|
-| `ClipPool` | ¿Qué clips están disponibles y cuáles conviene evitar repetir? |
-| `VideoDirector` | ¿Qué fragmento se reproduce y cuándo empieza o termina? |
-| `VisualComposer` | ¿Qué material presenta cada canal y cómo se relaciona con los demás? |
-| `GraphicScore` | ¿Cómo se transforma gráficamente el vídeo? |
-| `GlobalDirector` | ¿Se ralentiza, acelera o cubre temporalmente el conjunto? |
-| Motor SuperCollider | ¿Con qué voz, articulación y posición se interpreta el estado recibido? |
+| Calibración | Atender a lo escaso, lento y contenido. |
+| Codificación | Reconocer unidades, cuadrículas y repeticiones. |
+| Acumulación | Percibir cómo aumenta la actividad. |
+| Expansión dimensional | Seguir relaciones de espacio y superposición. |
+| Saturación | Observar concentración, densidad y presión. |
+| Ruptura | Reconocer una interrupción o puntuación colectiva. |
+| Recursión | Encontrar retornos y reorganizaciones del material. |
 
-### 5.2 Contenidos y capítulos
+La tabla ofrece claves de atención, no un recorrido obligatorio ni una respuesta
+emocional. El orden se elige mediante reglas de contraste y memoria. Una cesura
+separa secciones mediante colapso, vacío y emergencia. La retirada y la
+respiración también componen.
 
-El compositor elige entre vídeo, generador, respiración y transición. Un
-**generador** dibuja un material mediante reglas —por ejemplo, una matriz de
-puntos— en lugar de mostrar directamente el fotograma. Puede incorporar datos
-del análisis. Una **respiración** reduce la actividad; no garantiza silencio
-absoluto, porque puede persistir una voz o una cola de efecto.
+La variación no implica que cualquier cosa ocurra en cualquier momento. Cada
+sección limita materiales, duraciones y comportamientos. El sistema recuerda
+elecciones recientes y favorece otras posibilidades.
 
-Cada capítulo tiene una duración y un recorrido: aparición, desarrollo,
-umbral, transformación y disolución. Una envolvente regula cuánto se hace
-presente. Una permanencia mínima impide que una lectura momentánea interrumpa
-constantemente la composición. En un capítulo de vídeo también interviene la
-notificación de que el fragmento ha terminado.
+## Ocho pantallas que se relacionan
 
-### 5.3 Azar con memoria
+Cada pantalla corresponde a un canal. Los canales comparten información y reloj,
+pero pueden presentar contenidos diferentes.
 
-Las opciones se sortean con pesos. Antes del sorteo se aplican restricciones:
-materiales deshabilitados, historia reciente, vecinos y disponibilidad de vídeo.
-El sistema puede reducir el peso de repetir el contenido actual y favorecer
-familias acordes con el movimiento colectivo. Si faltan candidatos, relaja
-algunas restricciones.
-
-Por ejemplo, pesos `45, 35, 12, 8` repartirían un sorteo sin restricciones en
-45 % vídeo, 35 % generador, 12 % respiración y 8 % transición. El programa real
-modifica los candidatos antes de decidir; esos números no predicen por sí solos
-lo que ocupará cada pantalla.
-
-La semilla inicial organiza parte del azar del compositor. Repetir una semilla
-no equivale a reproducir una grabación idéntica: también influyen el vídeo,
-los tiempos de carga, la intervención manual y otros sorteos del programa.
-
-### 5.4 Cómo dialogan las ocho pantallas
-
-| Organización | Relación entre canales | Lectura para el público |
-|---|---|---|
-| Unísono | Comparte una decisión de material. | El conjunto actúa como una sola figura. |
-| Propagación | Introduce desfases y relaciones entre canales. | Una acción parece recorrer la instalación. |
-| Contrapunto | Permite estados diferenciados por canal. | Coexisten varias líneas de atención. |
-| Grupos 4+4 | Organiza dos conjuntos de cuatro. | Dos bloques pueden responderse o contrastar. |
-
-Son reglas de relación, no necesariamente ocho copias idénticas de píxeles o
-sonido. El rol de cada pantalla puede cambiar la interpretación del material.
-
-En la base publicada hay momentos de pulso común (`PulseSystem`), barrido
-común (`BarScanSystem`) e intercalación. Durante la intercalación conviven
-vídeo y generadores; pueden aparecer ocupaciones temporales de todo el muro,
-ruido o inversiones de imagen según la configuración.
-
-### 5.5 Movimiento colectivo
-
-El compositor resume lo que ocurre entre canales: actividad, población de
-regiones, coherencia direccional, diversidad de materiales, convergencia y
-tensión. Son índices construidos por el programa, no estados psicológicos.
-
-Con ellos propone estados como suspensión, codificación, acumulación,
-propagación, convergencia, fragmentación, saturación, ruptura y residuo. Las
-reglas también consideran el material visible; una pantalla llena de ruido
-puede contribuir a saturación aunque el vídeo de fondo tenga poca actividad.
-
-El candidato debe sostenerse durante un tiempo y el estado vigente tiene una
-permanencia protegida. Los eventos tienen además tiempos de espera. Los
-estados urgentes pueden usar una espera menor y saltarse la permanencia habitual.
-Este mecanismo evita saltar de estado ante cada fluctuación y permite reconocer
-frases en lugar de una sucesión de reacciones aisladas.
-
-## 6. Cómo se construye la imagen
-
-Hay tres familias de trabajo visual:
-
-| Familia | Operación | Ejemplos |
-|---|---|---|
-| Vídeo transformado | Reinterpreta brillo, movimiento y regiones del fotograma. | Cifras en `VideoNumbers`, líneas en `VideoLines`, cajas en `BBoxTracker`. |
-| Generadores procedimentales | Dibuja estructuras mediante reglas y parámetros. | `BitMatrix`, `PhaseLines`, `Pulse`, `BarScan`, `GranularRaster`. |
-| Nube de puntos de vídeo | Muestrea la imagen en una rejilla y coloca esos puntos en un espacio con profundidad. | Relieve de luminancia, máscaras o profundidad PDJV cuando están disponibles. |
-
-En `VideoNumbers`, por ejemplo, el brillo de cada celda se convierte en una
-cifra. En `Waveform` se muestra un historial de energía de movimiento: no es
-el dibujo de la onda sonora. En `Barcode`, barras resumen la ocupación de
-primer plano por columnas. Esas traducciones hacen visibles ciertas medidas
-y omiten otras.
-
-La nube de puntos puede desplazar los puntos en profundidad usando su brillo.
-Eso produce un relieve de la imagen, no una medición tridimensional del campo.
-Las rutas que leen profundidad PDJV dependen de los datos que contenga el
-paquete; la apariencia volumétrica por sí sola no demuestra exactitud física.
-Del mismo modo, «térmico» nombra un tratamiento de intensidad y color: el vídeo
-no procede de una cámara que mida temperatura.
-
-La base pública recorre una secuencia gráfica fija con pausas `BwClean`.
-La edición de trabajo utiliza una bolsa de modos barajada y restringida por
-la sección activa. `SlitScan`, que acumula columnas de distintos instantes,
-queda fuera de la secuencia automática en ambas rutas.
-
-## 7. Cómo se construye el sonido
-
-El modo visual o el generador selecciona un perfil sonoro. El motor combina
-voces sostenidas, pulsos, ruido, subgraves, acentos y efectos según ese perfil
-y el estado recibido. Los datos del vídeo modulan esa identidad: no existe
-una única regla universal «un jugador = una nota».
-
-| Control | Papel en la interpretación sonora |
+| Relación | Qué buscar durante la visita |
 |---|---|
-| Modo, generador y etapa temporal | Seleccionan y articulan una familia sonora. |
-| Energía, flujo y geometría agregada | Modulan actividad, textura y parámetros espaciales dentro del perfil. |
-| Reloj y organización compartidos | Proporcionan referencias para coordinar entradas, pulsos y relaciones. |
-| Eventos estimados | Pueden producir acentos, sujetos a reglas de disparo. |
-| Respiración, disolución y clear global | Reducen presencia o introducen separaciones. Las colas no siempre desaparecen de inmediato. |
+| Unísono | Varios canales actúan juntos y el conjunto se percibe como una figura. |
+| Propagación | Una acción parece pasar de una zona a otra. |
+| Contrapunto | Diferentes actividades conviven y se responden. |
+| Dos grupos de cuatro | Dos bloques establecen similitudes o contrastes. |
 
-### 7.1 OSC como vocabulario de control
+El programa resume la actividad de las imágenes y la diversidad del material
+visible. Si una tendencia persiste, puede favorecer una relación o una familia
+de materiales. Mantener decisiones durante un tiempo permite percibir frases
+en lugar de respuestas a cada pequeña fluctuación.
 
-`OSCSender` publica mensajes con dirección y valores. Por ejemplo,
-`/pdj/channel/0/motion/energy` informa de una medida del canal 0;
-`/pdj/clock/state` comunica el reloj común y `/pdj/collective/state` resume el
-estado colectivo. SuperCollider recibe normalmente en UDP 9001.
+## Cómo se relacionan imagen y sonido
 
-El envío incluye hasta ocho huecos de blobs por canal y vacía los no usados.
-Así una detección que desaparece no queda indefinidamente activa en el receptor.
-Las revisiones distinguen cambios de capítulo de actualizaciones de sus
-parámetros. El reloj compartido es una referencia musical; el transporte UDP
-no garantiza por sí mismo sincronización exacta con cada fotograma.
+Los materiales visuales tienen perfiles de interpretación sonora. El motor
+combina voces sostenidas, pulsos, texturas de ruido, subgraves y acentos.
+Las medidas del vídeo modulan parámetros dentro de esos perfiles; el estado
+compositivo organiza su duración y relación.
 
-### 7.2 Espacialización: de la imagen a la sala
+No hay una correspondencia universal entre un cuerpo y una nota. Una medida
+puede intervenir en una textura o en un desplazamiento espacial, según el
+contexto. La relación se construye mediante varias reglas.
 
-El motor obtiene posiciones de fuentes a partir de la geometría recibida y
-del contexto compositivo. DBAP reparte una fuente entre altavoces según la
-distancia a sus posiciones configuradas. Conceptualmente:
+Monochrome, Ember, Glacier, Verdant e Iris organizan el color y participan en
+el tratamiento sonoro. El nombre de una paleta no impone una emoción; la
+interpretación también depende de cada visitante.
 
-```text
-distancia_i = máximo(distancia entre fuente y altavoz_i, 0,001)
-peso_i = distancia_i ^ (−rolloff) + spread × 0,5
-ganancia_i = peso_i / raíz(media de los pesos al cuadrado)
-```
+En el montaje multicanal, una fuente se reparte entre varias salidas de audio.
+Nuestra posición modifica la relación con esas fuentes. Una pantalla no
+representa un altavoz exclusivo.
 
-`rolloff` controla cuánto pesa la cercanía y `spread` añade una contribución
-común. La fórmula refleja la normalización RMS de esta implementación; no
-significa que todas las ganancias sumen 1. Las ganancias afectan a la mezcla,
-cuya salida también depende de niveles y efectos.
+## Leer la franja sonora
 
-En DANTE se utilizan ocho salidas físicas. La ruta estéreo reduce la experiencia
-a izquierda y derecha mediante panoramización; sirve para escuchar el sistema,
-pero no reproduce el espacio de ocho altavoces.
+En la parte inferior de cada canal hay tres filas: **sonido**, **pulsos** y
+**textura**. La derecha señala **AHORA**; hacia la izquierda quedan seis
+segundos de historia.
 
-## 8. Un ejemplo, paso a paso
-
-Este recorrido es ilustrativo, no una secuencia obligatoria:
-
-1. Un canal recibe un fragmento deportivo. Aparece una imagen con varias
-   regiones en movimiento.
-2. El análisis detecta cambio de brillo, un desplazamiento dominante y posiciones
-   aproximadas. Si la cámara panea, parte de esos datos procederá de la cámara.
-3. Un tratamiento puede dibujar cifras o líneas, mientras otros canales muestran
-   generadores con su propia duración y fase.
-4. El motor sonoro mantiene el perfil de cada material y modifica parámetros
-   con las medidas disponibles. La posición agregada puede mover una fuente.
-5. Si una tendencia colectiva persiste, el compositor puede cambiar la relación
-   entre canales o favorecer otra familia en la siguiente elección.
-6. Al terminar capítulos y fragmentos, aparecen materiales nuevos, pausas o
-   transiciones. La memoria reciente favorece variación sin borrar la gramática.
-
-Para observarlo en sala, seguir primero una pantalla: reconocer su material,
-su duración y su retirada. Después ampliar la atención al conjunto: comprobar
-si otras pantallas acompañan, responden o mantienen una actividad diferente.
-
-## 9. Dónde continuar
-
-| Quiero entender… | Lectura o código de referencia |
+| Marca | Lectura |
 |---|---|
-| Instalación, arranque y controles | [Manual de instalación y operación](MANUAL_ES.md) |
-| Las ampliaciones de septiembre de 2026 | [La edición de trabajo](EDICION_DE_TRABAJO_ES.md) |
-| Configuración de audio de sala | [Audio multicanal](AUDIO_MULTICHANNEL_ES.md) |
-| Elección de vídeo | [`ClipPool.cpp`](../src/ClipPool.cpp), [`VideoDirector.cpp`](../src/VideoDirector.cpp) |
-| Medidas de imagen y eventos | [`CVPipeline.cpp`](../src/CVPipeline.cpp), [`EventDetector.cpp`](../src/EventDetector.cpp) |
-| Reglas compositivas | [`VisualComposer.cpp`](../src/VisualComposer.cpp), [`GlobalDirector.cpp`](../src/GlobalDirector.cpp) |
-| Tratamientos y generadores | [`GraphicScore.cpp`](../src/GraphicScore.cpp), [`VisualGenerator.cpp`](../src/VisualGenerator.cpp) |
-| Relieve de vídeo | [`VideoPointCloudGenerator.cpp`](../src/VideoPointCloudGenerator.cpp) |
-| Comunicación y síntesis | [`OSCSender.cpp`](../src/OSCSender.cpp), [`pdj_datamatics.scd`](../supercollider/pdj_datamatics.scd) |
-| Paquetes volumétricos independientes | [Formato PDJV](pdjv/PDJV_FORMAT.md), [analyzer](../analyzer/README.md), [runtime volumétrico](../volumetric/README.md) |
+| Punto o marca breve en pulsos | Actividad breve informada por el motor de audio. |
+| Trazo en sonido | Continuidad de la voz medida. |
+| Trazo grueso en textura | Actividad de la capa de ruido medida. |
+| Espacio sin marca | No hay actividad representada de esa capa en ese tramo. |
 
-Los valores de configuración son parte de la interpretación. Los ajustes
-guardados por el operador pueden prevalecer sobre los incluidos en el paquete;
-por eso una captura, una sesión local y otra instalación pueden mostrar
-duraciones, colores o distribuciones diferentes sin dejar de utilizar el mismo
-principio compositivo.
+La franja representa tres capas instrumentadas. Otras contribuciones y efectos
+pueden escucharse sin una marca propia. Un espacio vacío no certifica silencio
+en toda la sala. Si faltan datos recientes, el presente no permite afirmar que
+haya silencio. La [guía de la franja](PARTITURA_SONORA_ES.md) detalla su alcance.
+
+## Un recorrido posible de atención
+
+1. Elegir una pantalla y describir su material sin intentar nombrar el algoritmo.
+2. Seguir su entrada, permanencia, transformación y retirada.
+3. Escuchar si se reconoce una relación temporal con alguna actividad sonora.
+4. Ampliar la mirada y buscar coincidencias, respuestas o contrastes.
+5. Cambiar de posición, si es posible, y comparar la experiencia espacial.
+
+Es útil distinguir observación —«aparecen marcas repetidas»—, interpretación
+—«me recuerdan una carrera»— e hipótesis —«quizá el sonido responde a ese
+movimiento»—. No hace falta encontrar una única relación correcta.
+
+La [guía de mediación](MEDIACION_MUSEOS_ES.md) propone actividades para trabajar
+estas diferencias. [Algoritmos y procesos](ALGORITMOS_Y_PROCESOS_ES.md) explica
+cómo se calculan y utilizan los datos.

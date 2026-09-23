@@ -1,359 +1,146 @@
-# Partitura del Juego — Audio Multicanal
-## Motor SuperCollider · DANTE 8 canales · Sala Abierta
+# Partitura del Juego — Audio y distribución espacial
 
-Este documento cubre la configuración completa de audio: el motor SuperCollider,
-el sistema espacial DBAP, la conexión a la red DANTE 5 de la Sala Abierta y los
-procedimientos de arranque, prueba y apagado. Incluye rescate automático en estéreo
-para pruebas sin red DANTE.
+Guía del motor incluido en `SuperCollider/` y del entorno
+`Runtime/SuperCollider.app`. Para las acciones diarias, consultar el
+[manual diario](MANUAL_DIARIO_COMANDOS_ES.md).
 
----
+## 1. Recorrido de la señal
 
-## 1. Estructura del motor de audio
+```text
+Aplicación visual → mensajes OSC → SuperCollider → dispositivo de audio
+    → salidas estéreo o red DANTE → amplificación → altavoces
+```
 
-El motor comprende cuatro archivos en `supercollider/`:
+OSC transmite parámetros, no audio. El motor escucha en UDP **9001**;
+la aplicación recibe respuestas en **9002** según la configuración incluida.
+El motor genera voces, pulsos, texturas, subgraves y acentos, los articula con
+el estado compositivo y los envía a la mezcla.
 
-| Archivo | Función |
+Un canal visual es una fuente de información y composición. No equivale a un
+altavoz exclusivo: su contribución puede distribuirse entre varias salidas.
+
+## 2. Iniciar el motor
+
+Abrir **Start Audio.command** desde la carpeta de entrega. El lanzador consulta
+los dispositivos, selecciona DANTE si lo detecta y ofrece un menú de salida
+cuando corresponde a estéreo. Reproduce un ping y solicita **y/n + Enter**.
+El ping utiliza la salida del sistema operativo, que puede ser distinta de
+la elegida para el motor.
+
+Esperar **PDJ Datamatics — listening OSC UDP :9001**. En DANTE se realiza una
+prueba secuencial; comprobar físicamente el destino de cada salida. El mensaje
+**All 8 channels tested** confirma que terminó la secuencia, no la escucha.
+Después abrir el visual para recibir los controles de la obra.
+
+El entorno de sonido está incluido. El paquete utiliza salida de audio y no
+analiza un micrófono del público. Las autorizaciones que solicite macOS se
+resuelven en el ordenador con el personal responsable.
+
+## 3. Preparar DANTE
+
+El técnico del recinto prepara Dante Virtual Soundcard, su licencia, la conexión
+Ethernet y Dante Controller. Activar el dispositivo y utilizar **48 kHz**, en
+coherencia con los receptores de sala. El motor abre el número de salidas
+anunciado por DVS y utiliza ocho para la obra; los valores de su configuración
+incluida son bloque de 512 y búfer de hardware de 512 muestras en DANTE.
+
+En Dante Controller, asociar las ocho rutas de la obra con las entradas del
+sistema de amplificación. Confirmar el desplazamiento de salida indicado por
+el motor si existe una configuración específica. Con el desplazamiento cero,
+las rutas corresponden a DVS 1–8.
+
+| Ruta de la obra | Comprobación en sala |
 |---|---|
-| `pdj_launcher.scd` | Punto de entrada del paquete de distribución. Encadena `pdj_audio_config.scd` y `pdj_datamatics.scd`, imprime un informe de configuración completo y lanza un monitor de salud periódico cada 2 minutos. |
-| `pdj_audio_config.scd` | Detecta Dante Virtual Soundcard. DANTE presente → 8 canales de salida a 48 kHz; ausente → rescate estéreo en dispositivo por defecto. Reinicia el servidor con las opciones correctas. **Evaluar siempre antes de `pdj_datamatics.scd`.** |
-| `pdj_datamatics.scd` | Motor principal: buses de control, SynthDefs, motor espacial DBAP, conductor de datos (4 Hz), secuenciador binario en cuadrícula, manejadores OSC, vigilancia de telemetría. Carga `pdj_mode_voices.scd` automáticamente. |
-| `pdj_mode_voices.scd` | Un SynthDef por cada modo de `GraphicScore` (13 modos + `pdjKick`). Todos leen los mismos buses de control y usan la misma envoltura de vida para crossfades suaves. |
+| 1 | Identificar receptor y zona física durante su tono. |
+| 2 | Identificar receptor y zona física durante su tono. |
+| 3 | Identificar receptor y zona física durante su tono. |
+| 4 | Identificar receptor y zona física durante su tono. |
+| 5 | Identificar receptor y zona física durante su tono. |
+| 6 | Identificar receptor y zona física durante su tono. |
+| 7 | Identificar receptor y zona física durante su tono. |
+| 8 | Identificar receptor y zona física durante su tono. |
 
-### Señal OSC recibida desde openFrameworks
+Registrar la correspondencia real del recinto. No deducir el orden físico solo
+por el número de pantalla. Una ruta puede alimentar más de un altavoz según el
+sistema de amplificación del museo.
 
-El motor escucha en el puerto UDP **9001**. Para cada canal 0–7:
+## 4. Escucha estéreo
 
-```
-/pdj/channel/{N}/motion/energy         — diferencia absoluta media de fotograma
-/pdj/channel/{N}/flow/magnitude|angle  — magnitud y dirección del flujo óptico
-/pdj/channel/{N}/blobs/count           — número de blobs activos
-/pdj/channel/{N}/blob/{0-7}/state      — posición, velocidad y área por blob
-/pdj/channel/{N}/contour/length        — longitud total de contornos
-/pdj/channel/{N}/event/collision|ball|crowd|leg_distance
-/pdj/channel/{N}/score/mode|revision   — modo activo de GraphicScore
-/pdj/channel/{N}/generator/mode|stage|organization|beat_phase|...
-/pdj/channel/{N}/director/temporal|speed|clear|clear_alpha
-/pdj/channel/{N}/program/moment|takeover|group_video_count
-/pdj/clock/state                        — BPM y fase de pulso compartido
-```
+Sin DANTE, el lanzador permite seleccionar un dispositivo estéreo disponible.
+El motor utiliza panoramización izquierda/derecha. Esta escucha permite revisar
+material, continuidad y mezcla; no reproduce la distribución espacial de ocho
+salidas.
 
-### Perfiles de escena sonora
+Si la instalación necesita DANTE y el dispositivo no aparece, detener el
+arranque y revisar la conexión. No tomar una escucha correcta en el portátil
+como comprobación del montaje de sala.
 
-El motor define dos tablas de perfiles que asignan la escena visual a parámetros
-de síntesis. Los valores son puntos base; el CV en vivo se mueve *dentro* de la
-escena, no la reemplaza.
+## 5. Espacialización DBAP
 
-**`~modeProfiles`** — una entrada por modo de `GraphicScore` (0–13):
-cada perfil fija `voice` (familia de drone 0–3), `tension`, `drone`, `air`,
-`pulse`, `color`, `space` y `crush`. Ejemplo: `thermal` → drone alto (0.88),
-espacio abierto (0.88), tensión baja (0.20) — inmóvil y caliente.
+DBAP calcula ganancias según la distancia entre una fuente virtual y las
+posiciones de altavoces configuradas. La posición depende de datos geométricos
+y decisiones compositivas. Un parámetro regula la caída con la distancia y
+otro añade dispersión. La implementación normaliza las ganancias mediante RMS.
 
-**`~generatorProfiles`** — una entrada por modo de `VisualGenerator` (0–14):
-cada perfil fija `family` (`pulse`, `noise`, `data`, `temporal` o `rupture`),
-`legacyMode` (voz cinematográfica de respaldo) y los mismos parámetros de CV.
+Las coordenadas `~speakerPositions` de `pdj_datamatics.scd` representan el plano
+de la sala entre 0 y 1. Deben concordar con la posición y el orden de las salidas
+físicas del montaje. El técnico puede revisarlas en ese archivo externo a la
+aplicación y reiniciar el audio. Escuchar la prueba y recorrer la sala después
+de cualquier ajuste.
 
-### Frecuencias base por canal
+[Algoritmos y procesos](ALGORITMOS_Y_PROCESOS_ES.md) explica el cálculo y sus
+límites. La espacialización no es una medida de la posición física de los
+jugadores ni de las personas visitantes.
 
-Cada canal tiene su propia fundamental (`~channelBases`) derivada de
-proporciones de entonación justa. No hay octavas ni dobles — cada canal
-es espectralmente distinto:
+## 6. Mezcla
 
-```supercollider
-~channelBases = [31.7, 33.1, 35.9, 38.3, 41.1, 43.7, 47.3, 50.9];
-//               ch0   ch1   ch2   ch3   ch4   ch5   ch6   ch7
-```
+**Start Mix Desk.command** inicia el motor con su interfaz de mezcla. Es una
+alternativa a **Start Audio.command**: detener el motor activo antes de usarla.
+La mesa permite ajustar niveles y guardar mediante **Save installation mix**.
+Su opción de OSC sintético sirve para audicionar; durante la obra se utilizan
+los datos de la aplicación visual.
 
-### Movimiento colectivo
+La mezcla del usuario está en:
 
-`VisualComposer` (openFrameworks) infiere un estado de `CollectiveMovement`
-de los ocho flujos de datos CV y lo envía como `/pdj/channel/{N}/program/...`.
-El motor de audio lo lee en `~collective` y lo usa para reorganizar densidad,
-sincronización, registro, espacio y silencio. Los nueve estados son:
-
-```
-suspension  codification  accumulation  propagation
-convergence  fragmentation  saturation  rupture  residue
+```text
+~/Library/Application Support/PartituraDelJuego/audio_mix.scdcfg
 ```
 
-Un candidato se adopta solo si permanece estable `collectiveDecisionHold`
-segundos. Cada estado tiene permanencia mínima protegida (`collectiveMinimumDwell`).
+El archivo de mezcla incluido en `SuperCollider/` proporciona valores del
+paquete. El volumen maestro también se controla desde **PDJ Control**; el
+ajuste visual de volumen está en `settings.json`. La configuración inicial
+incluye un valor maestro de 0,55. El nivel apropiado en sala se establece
+escuchando el sistema de amplificación y las condiciones del museo.
 
----
+## 7. Archivos y funciones
 
-## 2. Motor espacial DBAP
-
-Distance-Based Amplitude Panning distribuye las fuentes sonoras de los
-ocho canales sobre los ocho altavoces físicos en tiempo real.
-
-```supercollider
-// srcX, srcY : posicion de la fuente en coordenadas de sala (0-1)
-// rolloff    : exponente de distancia — 1.4 = foco moderado; 2.0 = nitido
-// spread     : 0 = fuente puntual; 1 = todos los altavoces iguales
-~dbapGains = { |srcX, srcY, rolloff = 1.4, spread = 0.0| ... }
-```
-
-| Dato visual de oF | Efecto espacial |
+| Archivo o grupo en `SuperCollider/` | Función |
 |---|---|
-| Centroide X,Y del blob | Posición de la fuente en el plano de la sala |
-| Cantidad de blobs | Dispersión: pocos = foco puntual; muchos = difuso |
-| Magnitud de flujo óptico | Rolloff: quietud = foco nítido; movimiento = halo |
-| `convergence` colectivo | Colapsa todas las fuentes hacia D3-2 (centro frente) |
-| `fragmentation` colectivo | Dispersión máxima, explota el cluster D3-6/D3-8 |
-| `propagation` colectivo | Barre la fuente X de izquierda a derecha en el tiempo |
-| Alpha de clear del director | Reduce todas las ganancias proporcionalmente |
-
-En rescate estéreo (sin DANTE), el mismo algoritmo opera con dos posiciones
-virtuales `[0, 0.5]` y `[1, 0.5]`, produciendo paneo estéreo estándar. Sin
-cambios de código.
-
----
-
-## 3. Requisitos de hardware (DANTE)
-
-- **Mac** con puerto Ethernet Gigabit activo (cable, no WiFi).
-  Los adaptadores USB-C o Thunderbolt a Ethernet son aceptables.
-- **Cable Ethernet** al mismo switch que la unidad DANTE 5 del recinto.
-- Conexión a internet para descargar el software de Audinate
-  (instalar antes de llegar al recinto).
-
----
-
-## 4. Software necesario
-
-Instalar **antes** de llegar al recinto:
-
-### Dante Virtual Soundcard (DVS)
-- Descarga: https://www.audinate.com/products/software/dante-virtual-soundcard
-- Licencia de pago (aprox. USD 30, perpetua por máquina). Activar antes de la visita.
-- Compatible con Apple Silicon desde la versión 4.2 en adelante.
-- Crea la interfaz de audio virtual `"Dante Virtual Soundcard"` en el sistema.
-
-### Dante Controller
-- Descarga: https://www.audinate.com/products/software/dante-controller
-- Gratuito. Configura el enrutamiento de canales en la red DANTE.
-- Se puede instalar en el mismo Mac o en cualquier equipo de la misma red.
-
----
-
-## 5. Configuración de macOS (una sola vez)
-
-### Permiso de micrófono
-```
-Configuración del Sistema → Privacidad y Seguridad → Micrófono
-→ Activar para SuperCollider
-```
-SuperCollider requiere este permiso aunque PDJ no use entrada de micrófono.
-
-### Red
-Verificar que el adaptador Ethernet muestre dirección IP al conectarse al switch
-del recinto. DHCP la asigna automáticamente. Con auto-IP (169.254.x.x), DVS y
-Dante Controller se descubren igualmente vía mDNS.
-
-### Firewall
-Agregar **Dante Virtual Soundcard** y **Dante Controller** a la lista de
-aplicaciones permitidas, o desactivar el firewall temporalmente.
-
-### Reposo y notificaciones
-```
-Configuración del Sistema → Batería → Nunca entrar en reposo cuando está enchufado
-Configuración del Sistema → Pantallas → Protector de pantalla → Nunca
-```
-Activar **Modo No Molestar** para evitar que sonidos del sistema lleguen a la
-salida DANTE.
-
----
-
-## 6. Configuración de Dante Virtual Soundcard
-
-1. Abrir la app **Dante Virtual Soundcard** (ícono en la barra de menú).
-2. Configurar:
-
-   | Parámetro         | Valor                                          |
-   |-------------------|------------------------------------------------|
-   | Transmit channels | 8                                              |
-   | Receive channels  | 2                                              |
-   | Sample rate       | 48000 Hz                                       |
-   | Latency           | 1 ms (mismo switch) · 5 ms (switch gestionado) |
-
-3. Hacer clic en **Enable**.
-4. Abrir **Configuración de Audio MIDI** (`/Aplicaciones/Utilidades/Audio MIDI Setup`)
-   y confirmar que `Dante Virtual Soundcard` muestra **48000.0 Hz · 8 canales de salida**.
-   Si el sample rate no es 48000, cambiarlo manualmente.
-
-> Si hay interrupciones (dropouts) durante la instalación, subir latencia DVS
-> a 5–10 ms y el `blockSize` a 512 en `supercollider/pdj_audio_config.scd`.
-
----
-
-## 7. Enrutamiento en Dante Controller
-
-1. Abrir **Dante Controller**.
-2. Esperar a que aparezcan en la vista de red:
-   - `Dante Virtual Soundcard` (el Mac)
-   - El dispositivo DANTE 5 del recinto
-   Si no aparecen en 30 segundos: verificar cable Ethernet, encendido de DANTE 5
-   y dirección IP del adaptador en Configuración del Sistema.
-
-3. En la pestaña **Routing** crear las suscripciones (receptor ← transmisor):
-
-   | Receptor DANTE 5 | Transmisor DVS | Altavoces físicos              |
-   |------------------|----------------|-------------------------------|
-   | D3-1             | DVS Out 1      | Derecha, frente (2 unidades)  |
-   | D3-2             | DVS Out 2      | Centro, frente                 |
-   | D3-3             | DVS Out 3      | Izquierda, frente (2 unidades)|
-   | D3-4             | DVS Out 4      | Muro izquierdo, media prof.   |
-   | D3-5             | DVS Out 5      | Izquierda, fondo              |
-   | D3-6             | DVS Out 6      | Agrupación central             |
-   | D3-7             | DVS Out 7      | Centro, fondo                 |
-   | D3-8             | DVS Out 8      | Agrupación central (D3-6)     |
-
-4. En **Device Info** de DANTE 5: establecer **Clock Master = Yes**.
-5. En **Device Info** de DVS: confirmar **Sync to External**.
-6. Ambos dispositivos deben mostrar **candado verde**. Candado amarillo o rojo
-   indica desajuste de reloj — revisar que DVS y Audio MIDI Setup estén a 48000 Hz.
-
-> Esta configuración se guarda en la red DANTE. No es necesario repetirla en
-> cada sesión; solo al cambiar de ordenador o reconfigurar el sistema.
-
----
-
-## 8. Arranque (paquete de distribución)
-
-El paquete incluye `Start Audio.command`. Doble clic para arrancar.
-
-```
-[1/3] Detectando dispositivos de audio (pdj_audio_config.scd)
-      -> "PDJ audio: DANTE detected [...] -> 8ch @ 48kHz"
-         o "PDJ audio: DANTE not found -> stereo fallback on default device"
-[2/3] Servidor de audio listo — imprime informe completo:
-      modo DANTE, dispositivo, canales, sample rate, posiciones de altavoces
-[3/3] Cargando motor (pdj_datamatics.scd)
-      -> "PDJ Datamatics — listening OSC UDP :9001"
-```
-
-Dejar la ventana de Terminal abierta durante toda la instalación.
-Cada 2 minutos imprime una línea de salud:
-```
-[PDJ health] server:running  mode:DANTE  speakers:8  channels:8
-```
-
-Después lanzar `Partitura_del_Juego.app`.
-
----
-
-## 9. Arranque desde el IDE de SuperCollider (solo desarrollo)
-
-**No presionar Boot Server (Cmd+B) en ningún momento.**
-`pdj_audio_config.scd` arranca el servidor con el dispositivo y canal count correctos.
-
-```
-Paso 1. Conectar cable Ethernet al switch del recinto.
-        Verificar que DVS esté habilitado (ícono activo en la barra de menú).
-
-Paso 2. Abrir SuperCollider IDE.
-
-Paso 3. Evaluar pdj_audio_config.scd
-        (seleccionar todo → Cmd+Return)
-        Esperar uno de estos mensajes en Post Window:
-
-        "PDJ audio: DANTE detected [...] -> 8ch @ 48kHz"
-            Sistema operará en modo 8 canales.
-
-        "PDJ audio: DANTE not found -> stereo fallback on default device"
-            Sistema operará en estéreo. Revisar DVS y Ethernet si se
-            esperaba DANTE.
-
-        Esperar hasta ver "Server ready".
-
-Paso 4. Evaluar pdj_datamatics.scd
-        (seleccionar todo → Cmd+Return)
-        Esperar: "PDJ Datamatics — listening OSC UDP :9001"
-
-Paso 5. Lanzar Partitura_del_Juego.
-
-Paso 6. Opcional — verificar audio sin oF:
-        ~testOsc.play;     // genera OSC sintético de prueba
-        ~testOsc.stop;     // detener el OSC de prueba
-```
-
----
-
-## 10. Prueba de altavoces
-
-Ejecutar con `~testOsc.play` activo o con oF en ejecución:
-
-```supercollider
-~speakerTest.();
-```
-
-La rutina activa cada altavoz 2 segundos en orden (D3-1 a D3-8) e imprime el
-número en Post Window. Recorrer la sala y confirmar que cada altavoz físico
-suena en el paso correcto.
-
-Si un altavoz suena en el paso incorrecto, hay dos opciones:
-- Reordenar las suscripciones en Dante Controller (DVS Out N → D3-M).
-- Actualizar `~speakerPositions` en `pdj_datamatics.scd` para que el índice
-  corresponda a la posición física correcta.
-
----
-
-## 11. Calibración de posiciones de altavoces en sitio
-
-Las posiciones iniciales están derivadas del plano de la Sala Abierta.
-Medirlas físicamente y normalizarlas (dividir entre ancho y profundidad de sala):
-
-```supercollider
-// Coordenadas [x, y] normalizadas 0-1
-// x: izquierda (0) -> derecha (1)
-// y: frente (0) -> fondo (1)
-// Indices: 0=D3-1, 1=D3-2, ..., 7=D3-8
-~speakerPositions = [
-    [0.82, 0.12],  // D3-1: derecha, frente (2 unidades fisicas)
-    [0.50, 0.08],  // D3-2: centro, frente
-    [0.14, 0.16],  // D3-3: izquierda, frente (2 unidades fisicas)
-    [0.04, 0.50],  // D3-4: muro izquierdo, media profundidad
-    [0.10, 0.84],  // D3-5: izquierda, fondo
-    [0.40, 0.58],  // D3-6: agrupacion central
-    [0.56, 0.74],  // D3-7: centro trasero
-    [0.44, 0.54]   // D3-8: agrupacion central (cerca de D3-6)
-];
-```
-
-Ejecutar `~speakerTest.()` después de actualizar para verificar el comportamiento
-del DBAP con las nuevas coordenadas.
-
-> D3-6 y D3-8 están físicamente muy cerca. Si el DBAP no les asigna cobertura
-> distinta, separar sus coordenadas Y unos 0.05 puntos.
-
----
-
-## 12. Apagado
-
-```
-Paso 1. Detener SuperCollider:
-        ~shutdown.();     (o Cmd+.)
-
-Paso 2. Esperar confirmación de shutdown en Post Window.
-
-Paso 3. Cerrar Partitura_del_Juego.
-
-Paso 4. Esperar 5 segundos antes de deshabilitar DVS o desconectar Ethernet.
-
-IMPORTANTE: nunca deshabilitar DVS ni desconectar Ethernet mientras el
-            servidor de SuperCollider esté activo. Provoca caída del servidor.
-```
-
----
-
-## 13. Diagnóstico de problemas frecuentes
-
-| Síntoma | Causa probable | Solución |
-|---|---|---|
-| No aparece dispositivo DANTE en SC | DVS no está habilitado | Abrir app DVS → Enable |
-| Candado amarillo en Dante Controller | Desajuste de sample rate | Establecer 48000 Hz en DVS y Audio MIDI Setup |
-| Interrupciones de audio (dropouts) | Latencia DVS muy baja | Subir latencia a 5–10 ms; subir `blockSize` a 512 en `pdj_audio_config.scd` |
-| Audio en SC pero no salen altavoces | Enrutamiento incompleto o DANTE 5 apagado | Verificar suscripciones en Dante Controller; confirmar encendido de DANTE 5 |
-| Caída del servidor SC al salir | DVS deshabilitado antes de cerrar SC | Detener siempre SC con `~shutdown.()` primero |
-| Altavoz incorrecto en la prueba | Desfase entre canal DANTE y posición física | Reordenar suscripciones en Dante Controller o actualizar `~speakerPositions` |
-| Sistema arranca en estéreo inesperadamente | Mac no conectado a la red DANTE | Verificar cable Ethernet e IP del adaptador |
-| Servidor SC no arranca | `pdj_audio_config.scd` no evaluado primero | Seguir secuencia del § 9 exactamente |
+| `pdj_launcher.scd` | Prepara el arranque, carga el motor y muestra estado y prueba de salida. |
+| `pdj_audio_config.scd` | Selección de dispositivo y opciones del servidor. |
+| `pdj_datamatics.scd` | Control OSC, estados, síntesis, espacialización y mezcla. |
+| `pdj_mode_voices.scd` | Vocabulario de voces asociado a materiales visuales. |
+| `pdj_palette_voices.scd`, `pdj_ember_voices.scd`, `pdj_world_voices.scd` | Tratamientos y materiales de los mundos sonoros. |
+| `pdj_video_phrases.scd`, `pdj_functional_material.scd` | Articulación sonora de capítulos de vídeo y su material. |
+| `pdj_mix_config.scd`, `pdj_mix_desk.scd` | Persistencia e interfaz de mezcla. |
+| `pdj_volumetric_compat.scd` | Compatibilidad de mensajes de la ruta volumétrica. |
+| `data_matrix_functional_study.scd` | Estudio incluido en la carpeta; no se inicia con la operación habitual. |
+| `audio_mix.scdcfg`, `audio_mix.default.json` | Recursos de configuración de mezcla. |
+
+El lanzador carga las dependencias del motor. El personal de sala no necesita
+abrir ni evaluar estos archivos individualmente.
+
+## 8. Diagnóstico y cierre
+
+| Síntoma | Acción |
+|---|---|
+| Terminal parece detenida | Revisar el menú de salida y la pregunta del ping. |
+| DANTE no se detecta | Consultar Check Audio.command; revisar DVS, Ethernet y dispositivo activo. |
+| Hay prueba local pero no audio de sala | Revisar suscripciones, frecuencia de muestreo, amplificación y silenciamientos. |
+| No hay respuesta a la imagen | Comprobar que el visual está activo, OSC apunta a localhost:9001 y no hay un segundo motor. |
+| La salida se interrumpe | Conservar mensajes y revisar dispositivo, conexión y carga con el técnico. |
+| La franja sonora tiene actividad pero no se oye | Revisar toda la ruta física: la franja mide señal digital, no el altavoz. |
+
+Para cerrar, detener el visual con su lanzador y el audio con **Control+C** en
+su Terminal. Confirmar que cesa antes de desactivar DVS o desconectar el equipo.
+La recuperación técnica de procesos está en el [manual](MANUAL_ES.md).
